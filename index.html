@@ -107,6 +107,20 @@
             color: var(--accent-hover);
         }
 
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 40px;
+            grid-column: 1 / -1;
+        }
+
+        .error-message {
+            text-align: center;
+            color: var(--accent);
+            padding: 40px;
+            grid-column: 1 / -1;
+        }
+
         footer {
             text-align: center;
             margin-top: 60px;
@@ -122,18 +136,48 @@
             <p class="subtitle">A collection of useful single-page web tools</p>
         </header>
 
-        <div class="tools-grid">
-            <a href="toml/" class="tool-card">
-                <div class="tool-icon">🔄</div>
-                <div class="tool-name">TOML Converter</div>
-                <div class="tool-description">Convert between TOML, JSON, and YAML formats with syntax highlighting and validation.</div>
-                <span class="tool-arrow">Open tool →</span>
-            </a>
+        <div class="tools-grid" id="toolsGrid">
+            <div class="loading">Loading tools...</div>
         </div>
 
         <footer>
             <p>All tools run entirely in your browser — no data is sent to any server.</p>
         </footer>
     </div>
+
+    <script>
+        async function loadTools() {
+            const grid = document.getElementById('toolsGrid');
+
+            try {
+                const response = await fetch('tools.json');
+                if (!response.ok) {
+                    throw new Error('Failed to load tools');
+                }
+
+                const tools = await response.json();
+
+                if (tools.length === 0) {
+                    grid.innerHTML = '<div class="loading">No tools available yet.</div>';
+                    return;
+                }
+
+                grid.innerHTML = tools.map(tool => `
+                    <a href="${tool.id}/" class="tool-card">
+                        <div class="tool-icon">${tool.icon}</div>
+                        <div class="tool-name">${tool.name}</div>
+                        <div class="tool-description">${tool.description}</div>
+                        <span class="tool-arrow">Open tool →</span>
+                    </a>
+                `).join('');
+
+            } catch (error) {
+                grid.innerHTML = '<div class="error-message">Failed to load tools. Please refresh the page.</div>';
+                console.error('Error loading tools:', error);
+            }
+        }
+
+        loadTools();
+    </script>
 </body>
 </html>
