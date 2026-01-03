@@ -146,21 +146,49 @@
     </div>
 
     <script>
+        const REPO = 'hpharmsen/tools';
+        const BRANCH = 'main';
+        const EXCLUDED = ['.git', '.github', 'node_modules'];
+
         async function loadTools() {
             const grid = document.getElementById('toolsGrid');
 
             try {
-                const response = await fetch('tools.json');
+                // Fetch repository contents from GitHub API
+                const response = await fetch(`https://api.github.com/repos/${REPO}/contents?ref=${BRANCH}`);
                 if (!response.ok) {
-                    throw new Error('Failed to load tools');
+                    throw new Error('Failed to fetch repository contents');
                 }
 
-                const tools = await response.json();
+                const contents = await response.json();
 
-                if (tools.length === 0) {
+                // Filter for directories only (excluding special folders)
+                const folders = contents.filter(item =>
+                    item.type === 'dir' && !EXCLUDED.includes(item.name)
+                );
+
+                if (folders.length === 0) {
                     grid.innerHTML = '<div class="loading">No tools available yet.</div>';
                     return;
                 }
+
+                // Fetch meta.json for each folder
+                const tools = await Promise.all(folders.map(async folder => {
+                    try {
+                        const metaResponse = await fetch(`${folder.name}/meta.json`);
+                        if (metaResponse.ok) {
+                            const meta = await metaResponse.json();
+                            return { id: folder.name, ...meta };
+                        }
+                    } catch {}
+                    // Fallback: use folder name as tool name
+                    return {
+                        id: folder.name,
+                        name: folder.name.charAt(0).toUpperCase() + folder.name.slice(1),
+                        description: 'A web tool',
+                        icon: '🔧'
+                    };
+                }));
 
                 grid.innerHTML = tools.map(tool => `
                     <a href="${tool.id}/" class="tool-card">

@@ -1,8 +1,0 @@
-[
-  {
-    "id": "toml",
-    "name": "TOML Converter",
-    "description": "Convert between TOML, JSON, and YAML formats with syntax highlighting and validation.",
-    "icon": "🔄"
-  }
-]
