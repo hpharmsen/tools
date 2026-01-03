@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOML Converter</title>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --accent: #e94560;
+            --accent-hover: #ff6b6b;
+            --text-primary: #eee;
+            --text-secondary: #aaa;
+            --success: #4ecca3;
+            --border: #3a3a5c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .format-badges {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background: var(--bg-tertiary);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .detected-format {
+            font-size: 0.8rem;
+            background: var(--accent);
+            padding: 3px 10px;
+            border-radius: 10px;
+            color: white;
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        .btn-success {
+            background: var(--success);
+            border-color: var(--success);
+            color: #1a1a2e;
+        }
+
+        .drop-zone {
+            flex: 1;
+            position: relative;
+            min-height: 400px;
+        }
+
+        .drop-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(233, 69, 96, 0.1);
+            border: 3px dashed var(--accent);
+            border-radius: 8px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: var(--accent);
+            pointer-events: none;
+            margin: 10px;
+        }
+
+        .drop-zone.dragover .drop-overlay {
+            display: flex;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            padding: 20px;
+            resize: none;
+            outline: none;
+        }
+
+        textarea::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .output-area {
+            flex: 1;
+            min-height: 400px;
+            padding: 20px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            overflow: auto;
+            background: var(--bg-primary);
+        }
+
+        .error {
+            color: var(--accent);
+        }
+
+        .placeholder-text {
+            color: var(--text-secondary);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--success);
+            color: #1a1a2e;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>TOML Converter</h1>
+            <p class="subtitle">Convert JSON, YAML, CSV, and other formats to TOML</p>
+            <div class="format-badges">
+                <span class="badge">JSON</span>
+                <span class="badge">YAML</span>
+                <span class="badge">CSV</span>
+                <span class="badge">INI</span>
+                <span class="badge">XML</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        Input
+                        <span class="detected-format" id="detectedFormat" style="display: none;"></span>
+                    </div>
+                    <div class="panel-actions">
+                        <button class="btn" onclick="clearInput()" title="Clear">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            Clear
+                        </button>
+                        <button class="btn" onclick="loadSample()" title="Load sample">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            Sample
+                        </button>
+                    </div>
+                </div>
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-overlay">Drop file here</div>
+                    <textarea
+                        id="inputArea"
+                        placeholder="Paste or drop your JSON, YAML, CSV, INI, or XML data here..."
+                        spellcheck="false"
+                    ></textarea>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">TOML Output</div>
+                    <div class="panel-actions">
+                        <button class="btn" onclick="copyToClipboard()" title="Copy to clipboard">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                            Copy
+                        </button>
+                        <button class="btn btn-primary" onclick="shareResult()" title="Share">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                            </svg>
+                            Share
+                        </button>
+                    </div>
+                </div>
+                <div class="output-area" id="outputArea">
+                    <span class="placeholder-text">TOML output will appear here...</span>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Drop a file, paste data, or try a <a href="#" onclick="loadSample(); return false;">sample</a> to get started</p>
+        </footer>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const inputArea = document.getElementById('inputArea');
+        const outputArea = document.getElementById('outputArea');
+        const dropZone = document.getElementById('dropZone');
+        const detectedFormat = document.getElementById('detectedFormat');
+        const toast = document.getElementById('toast');
+
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        // Show toast notification
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        // Detect input format
+        function detectFormat(text) {
+            text = text.trim();
+            if (!text) return null;
+
+            // JSON detection
+            if ((text.startsWith('{') && text.endsWith('}')) ||
+                (text.startsWith('[') && text.endsWith(']'))) {
+                try {
+                    JSON.parse(text);
+                    return 'JSON';
+                } catch {}
+            }
+
+            // XML detection
+            if (text.startsWith('<?xml') || (text.startsWith('<') && text.endsWith('>'))) {
+                return 'XML';
+            }
+
+            // INI detection
+            if (/^\[[\w\s]+\]\s*$/m.test(text) && /^[\w]+\s*=\s*.+$/m.test(text)) {
+                return 'INI';
+            }
+
+            // CSV detection (has commas and multiple lines with similar structure)
+            const lines = text.split('\n').filter(l => l.trim());
+            if (lines.length > 1) {
+                const commasInFirst = (lines[0].match(/,/g) || []).length;
+                if (commasInFirst > 0) {
+                    const allSimilar = lines.slice(1, 5).every(line => {
+                        const commas = (line.match(/,/g) || []).length;
+                        return Math.abs(commas - commasInFirst) <= 1;
+                    });
+                    if (allSimilar) return 'CSV';
+                }
+            }
+
+            // YAML detection
+            if (text.includes(':') && !text.startsWith('{')) {
+                try {
+                    const parsed = jsyaml.load(text);
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        return 'YAML';
+                    }
+                } catch {}
+            }
+
+            return 'Unknown';
+        }
+
+        // Parse different formats
+        function parseInput(text, format) {
+            text = text.trim();
+
+            switch (format) {
+                case 'JSON':
+                    return JSON.parse(text);
+
+                case 'YAML':
+                    return jsyaml.load(text);
+
+                case 'CSV':
+                    return parseCSV(text);
+
+                case 'INI':
+                    return parseINI(text);
+
+                case 'XML':
+                    return parseXML(text);
+
+                default:
+                    // Try each parser
+                    try { return JSON.parse(text); } catch {}
+                    try { return jsyaml.load(text); } catch {}
+                    try { return parseCSV(text); } catch {}
+                    try { return parseINI(text); } catch {}
+                    try { return parseXML(text); } catch {}
+                    throw new Error('Unable to parse input. Please check the format.');
+            }
+        }
+
+        // CSV Parser
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(l => l.trim());
+            if (lines.length < 2) throw new Error('CSV needs at least a header and one data row');
+
+            const parseCSVLine = (line) => {
+                const result = [];
+                let current = '';
+                let inQuotes = false;
+
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        result.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                result.push(current.trim());
+                return result;
+            };
+
+            const headers = parseCSVLine(lines[0]).map(h =>
+                h.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'column'
+            );
+
+            const data = lines.slice(1).map((line, idx) => {
+                const values = parseCSVLine(line);
+                const obj = {};
+                headers.forEach((header, i) => {
+                    let val = values[i] || '';
+                    // Try to parse numbers
+                    if (/^-?\d+\.?\d*$/.test(val)) {
+                        val = parseFloat(val);
+                    } else if (val.toLowerCase() === 'true') {
+                        val = true;
+                    } else if (val.toLowerCase() === 'false') {
+                        val = false;
+                    }
+                    obj[header] = val;
+                });
+                return obj;
+            });
+
+            return { items: data };
+        }
+
+        // INI Parser
+        function parseINI(text) {
+            const result = {};
+            let currentSection = result;
+
+            text.split('\n').forEach(line => {
+                line = line.trim();
+                if (!line || line.startsWith(';') || line.startsWith('#')) return;
+
+                const sectionMatch = line.match(/^\[(.+)\]$/);
+                if (sectionMatch) {
+                    const sectionName = sectionMatch[1].trim();
+                    result[sectionName] = {};
+                    currentSection = result[sectionName];
+                    return;
+                }
+
+                const kvMatch = line.match(/^([^=]+)=(.*)$/);
+                if (kvMatch) {
+                    const key = kvMatch[1].trim();
+                    let value = kvMatch[2].trim();
+
+                    // Remove quotes
+                    if ((value.startsWith('"') && value.endsWith('"')) ||
+                        (value.startsWith("'") && value.endsWith("'"))) {
+                        value = value.slice(1, -1);
+                    } else if (/^-?\d+\.?\d*$/.test(value)) {
+                        value = parseFloat(value);
+                    } else if (value.toLowerCase() === 'true') {
+                        value = true;
+                    } else if (value.toLowerCase() === 'false') {
+                        value = false;
+                    }
+
+                    currentSection[key] = value;
+                }
+            });
+
+            return result;
+        }
+
+        // Simple XML Parser
+        function parseXML(text) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'text/xml');
+
+            const errorNode = doc.querySelector('parsererror');
+            if (errorNode) throw new Error('Invalid XML');
+
+            function nodeToObj(node) {
+                const obj = {};
+
+                // Handle attributes
+                if (node.attributes && node.attributes.length > 0) {
+                    for (let attr of node.attributes) {
+                        obj[`@${attr.name}`] = attr.value;
+                    }
+                }
+
+                // Handle child nodes
+                for (let child of node.childNodes) {
+                    if (child.nodeType === Node.TEXT_NODE) {
+                        const text = child.textContent.trim();
+                        if (text) {
+                            if (Object.keys(obj).length === 0) return text;
+                            obj['#text'] = text;
+                        }
+                    } else if (child.nodeType === Node.ELEMENT_NODE) {
+                        const childObj = nodeToObj(child);
+                        const name = child.nodeName;
+
+                        if (obj[name]) {
+                            if (!Array.isArray(obj[name])) {
+                                obj[name] = [obj[name]];
+                            }
+                            obj[name].push(childObj);
+                        } else {
+                            obj[name] = childObj;
+                        }
+                    }
+                }
+
+                return Object.keys(obj).length ? obj : '';
+            }
+
+            const root = doc.documentElement;
+            return { [root.nodeName]: nodeToObj(root) };
+        }
+
+        // Convert JavaScript object to TOML
+        function toTOML(obj, prefix = '') {
+            let result = '';
+            const tables = [];
+            const arrayTables = [];
+
+            function formatValue(val) {
+                if (val === null || val === undefined) return '""';
+                if (typeof val === 'string') {
+                    // Use multi-line string for strings with newlines
+                    if (val.includes('\n')) {
+                        return '"""\n' + val + '"""';
+                    }
+                    // Escape special characters
+                    return '"' + val.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\t/g, '\\t') + '"';
+                }
+                if (typeof val === 'number') {
+                    if (!isFinite(val)) return val > 0 ? 'inf' : '-inf';
+                    if (isNaN(val)) return 'nan';
+                    return String(val);
+                }
+                if (typeof val === 'boolean') return val ? 'true' : 'false';
+                if (val instanceof Date) return val.toISOString();
+                if (Array.isArray(val)) {
+                    // Check if it's an array of objects (table array)
+                    if (val.length > 0 && typeof val[0] === 'object' && !Array.isArray(val[0]) && val[0] !== null) {
+                        return null; // Will be handled as table array
+                    }
+                    // Simple array
+                    const items = val.map(v => formatValue(v)).filter(v => v !== null);
+                    return '[' + items.join(', ') + ']';
+                }
+                return null; // Object, will be handled as table
+            }
+
+            function processObject(obj, currentPrefix) {
+                let inline = '';
+
+                for (const [key, val] of Object.entries(obj)) {
+                    const safeKey = /^[a-zA-Z0-9_-]+$/.test(key) ? key : '"' + key + '"';
+                    const fullKey = currentPrefix ? `${currentPrefix}.${safeKey}` : safeKey;
+
+                    if (val === null || val === undefined) {
+                        inline += `${safeKey} = ""\n`;
+                    } else if (Array.isArray(val)) {
+                        // Check if array of objects
+                        if (val.length > 0 && typeof val[0] === 'object' && !Array.isArray(val[0]) && val[0] !== null) {
+                            val.forEach(item => {
+                                arrayTables.push({ key: fullKey, obj: item });
+                            });
+                        } else {
+                            const formatted = formatValue(val);
+                            inline += `${safeKey} = ${formatted}\n`;
+                        }
+                    } else if (typeof val === 'object' && !(val instanceof Date)) {
+                        tables.push({ key: fullKey, obj: val });
+                    } else {
+                        const formatted = formatValue(val);
+                        inline += `${safeKey} = ${formatted}\n`;
+                    }
+                }
+
+                return inline;
+            }
+
+            // Process root level
+            result = processObject(obj, prefix);
+
+            // Process tables
+            while (tables.length > 0) {
+                const table = tables.shift();
+                result += `\n[${table.key}]\n`;
+                result += processObject(table.obj, table.key);
+            }
+
+            // Process array tables
+            for (const at of arrayTables) {
+                result += `\n[[${at.key}]]\n`;
+                const subTables = [];
+                const originalTables = [...tables];
+                tables.length = 0;
+                result += processObject(at.obj, at.key);
+                // Handle nested tables within array items
+                while (tables.length > 0) {
+                    const table = tables.shift();
+                    result += `\n[${table.key}]\n`;
+                    result += processObject(table.obj, table.key);
+                }
+                tables.push(...originalTables);
+            }
+
+            return result.trim();
+        }
+
+        // Main conversion function
+        function convert() {
+            const input = inputArea.value.trim();
+
+            if (!input) {
+                outputArea.innerHTML = '<span class="placeholder-text">TOML output will appear here...</span>';
+                detectedFormat.style.display = 'none';
+                return;
+            }
+
+            try {
+                const format = detectFormat(input);
+                if (format) {
+                    detectedFormat.textContent = format;
+                    detectedFormat.style.display = 'inline';
+                } else {
+                    detectedFormat.style.display = 'none';
+                }
+
+                const data = parseInput(input, format);
+                const toml = toTOML(data);
+                outputArea.textContent = toml;
+            } catch (err) {
+                outputArea.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+            }
+        }
+
+        // Event listeners
+        inputArea.addEventListener('input', debounce(convert, 300));
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    inputArea.value = ev.target.result;
+                    convert();
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Copy to clipboard
+        async function copyToClipboard() {
+            const content = outputArea.textContent;
+            if (!content || content.includes('TOML output will appear')) {
+                showToast('Nothing to copy');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(content);
+                showToast('Copied to clipboard!');
+            } catch {
+                // Fallback
+                const textarea = document.createElement('textarea');
+                textarea.value = content;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                showToast('Copied to clipboard!');
+            }
+        }
+
+        // Share functionality
+        async function shareResult() {
+            const content = outputArea.textContent;
+            if (!content || content.includes('TOML output will appear')) {
+                showToast('Nothing to share');
+                return;
+            }
+
+            // Try Web Share API first
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'TOML Converter Result',
+                        text: content
+                    });
+                    return;
+                } catch (err) {
+                    if (err.name === 'AbortError') return;
+                }
+            }
+
+            // Fallback: Create shareable URL with data
+            try {
+                const compressed = btoa(encodeURIComponent(inputArea.value));
+                const url = `${window.location.origin}${window.location.pathname}?data=${compressed}`;
+
+                if (url.length > 2000) {
+                    // URL too long, just copy the result
+                    await navigator.clipboard.writeText(content);
+                    showToast('Result copied to clipboard (too large to share via URL)');
+                } else {
+                    await navigator.clipboard.writeText(url);
+                    showToast('Shareable link copied to clipboard!');
+                }
+            } catch {
+                showToast('Unable to share');
+            }
+        }
+
+        // Clear input
+        function clearInput() {
+            inputArea.value = '';
+            convert();
+        }
+
+        // Load sample data
+        function loadSample() {
+            const samples = [
+                // JSON sample
+                `{
+  "title": "TOML Converter",
+  "version": "1.0.0",
+  "author": {
+    "name": "Developer",
+    "email": "dev@example.com"
+  },
+  "features": ["json", "yaml", "csv", "ini", "xml"],
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "enabled": true
+  },
+  "servers": [
+    {"name": "alpha", "ip": "10.0.0.1"},
+    {"name": "beta", "ip": "10.0.0.2"}
+  ]
+}`,
+                // YAML sample
+                `title: My Application
+version: 2.0.0
+debug: true
+
+database:
+  host: localhost
+  port: 3306
+  name: myapp
+
+logging:
+  level: info
+  file: /var/log/app.log
+
+features:
+  - authentication
+  - caching
+  - rate-limiting`,
+                // CSV sample
+                `name,age,city,active
+Alice,30,New York,true
+Bob,25,Los Angeles,false
+Charlie,35,Chicago,true`,
+                // INI sample
+                `[owner]
+name = John Doe
+organization = Acme Inc
+
+[database]
+server = 192.168.1.1
+port = 5432
+enabled = true
+
+[logging]
+level = debug
+file = /var/log/app.log`
+            ];
+
+            const sample = samples[Math.floor(Math.random() * samples.length)];
+            inputArea.value = sample;
+            convert();
+        }
+
+        // Check for shared data in URL
+        function checkURLData() {
+            const params = new URLSearchParams(window.location.search);
+            const data = params.get('data');
+            if (data) {
+                try {
+                    inputArea.value = decodeURIComponent(atob(data));
+                    convert();
+                    // Clean URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch {}
+            }
+        }
+
+        // Initialize
+        checkURLData();
+    </script>
+</body>
+</html>
