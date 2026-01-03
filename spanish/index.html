@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spanish Translator</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --accent: #e94560;
+            --accent-hover: #ff6b6b;
+            --text-primary: #eee;
+            --text-secondary: #aaa;
+            --success: #4ecca3;
+            --border: #3a3a5c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .translator {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 700px) {
+            .translator {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .lang-badge {
+            font-size: 0.8rem;
+            background: var(--accent);
+            padding: 3px 10px;
+            border-radius: 10px;
+            color: white;
+        }
+
+        .input-container {
+            position: relative;
+            min-height: 250px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 250px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 16px;
+            padding: 20px;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .output-area {
+            min-height: 250px;
+            padding: 20px;
+            font-size: 16px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .placeholder-text {
+            color: var(--text-secondary);
+        }
+
+        .image-preview {
+            padding: 10px 20px;
+            display: none;
+        }
+
+        .image-preview img {
+            max-width: 100%;
+            max-height: 150px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .image-preview .remove-image {
+            position: relative;
+            display: inline-block;
+        }
+
+        .image-preview .remove-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        .drop-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(233, 69, 96, 0.15);
+            border: 3px dashed var(--accent);
+            border-radius: 8px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: var(--accent);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .drop-overlay.show {
+            display: flex;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--text-primary);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--success);
+            color: #1a1a2e;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.error {
+            background: var(--accent);
+            color: white;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .settings {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .settings-link {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .settings-link:hover {
+            color: var(--text-primary);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        .file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Spanish Translator</h1>
+            <p class="subtitle">Spanish ↔ Dutch translation · Paste text or images</p>
+        </header>
+
+        <div class="translator">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        Input
+                        <span class="lang-badge" id="inputLang">Text or Image</span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-small" onclick="document.getElementById('imageInput').click()">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-small" onclick="clearInput()">Clear</button>
+                    </div>
+                </div>
+                <input type="file" id="imageInput" class="file-input" accept="image/*" onchange="handleImageSelect(event)">
+                <div class="image-preview" id="imagePreview">
+                    <div class="remove-image">
+                        <img id="previewImg" src="" alt="Preview">
+                        <button class="remove-btn" onclick="removeImage()">×</button>
+                    </div>
+                </div>
+                <div class="input-container" id="inputContainer">
+                    <div class="drop-overlay" id="dropOverlay">Drop image here</div>
+                    <textarea
+                        id="inputText"
+                        placeholder="Type or paste text here, or drop/paste an image...
+
+• Spanish text → translates to Dutch
+• Other text → translates to Spanish
+• Questions about Spanish → get answered"
+                        spellcheck="false"
+                    ></textarea>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        Response
+                        <span class="lang-badge" id="outputLang">-</span>
+                    </div>
+                    <button class="btn btn-small" onclick="copyTranslation()">
+                        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                        Copy
+                    </button>
+                </div>
+                <div class="output-area" id="outputArea">
+                    <span class="placeholder-text">Translation will appear here...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" id="translateBtn" onclick="translate()">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
+                </svg>
+                Translate
+            </button>
+        </div>
+
+        <div class="settings">
+            <span class="settings-link" onclick="changeApiKey()">Change API Key</span>
+        </div>
+
+        <footer>
+            <p>Powered by Claude Sonnet via OpenRouter</p>
+        </footer>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+        const MODEL = 'anthropic/claude-sonnet-4';
+        const STORAGE_KEY = 'openrouter_api_key';
+
+        let apiKey = localStorage.getItem(STORAGE_KEY);
+        let currentImage = null; // Base64 image data
+
+        // Request API key on load if not present
+        function checkApiKey() {
+            if (!apiKey) {
+                requestApiKey();
+            }
+        }
+
+        function requestApiKey() {
+            const key = prompt('Please enter your OpenRouter API key:\n\nGet one at https://openrouter.ai/keys');
+            if (key && key.trim()) {
+                apiKey = key.trim();
+                localStorage.setItem(STORAGE_KEY, apiKey);
+                showToast('API key saved!');
+            }
+        }
+
+        function changeApiKey() {
+            const key = prompt('Enter new OpenRouter API key:', apiKey || '');
+            if (key && key.trim()) {
+                apiKey = key.trim();
+                localStorage.setItem(STORAGE_KEY, apiKey);
+                showToast('API key updated!');
+            }
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Image handling
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadImage(file);
+            }
+        }
+
+        function loadImage(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('Please select an image file', true);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentImage = e.target.result;
+                document.getElementById('previewImg').src = currentImage;
+                document.getElementById('imagePreview').style.display = 'block';
+                document.getElementById('inputLang').textContent = 'Image';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeImage() {
+            currentImage = null;
+            document.getElementById('imagePreview').style.display = 'none';
+            document.getElementById('imageInput').value = '';
+            document.getElementById('inputLang').textContent = 'Text or Image';
+        }
+
+        // Drag and drop
+        const inputContainer = document.getElementById('inputContainer');
+        const dropOverlay = document.getElementById('dropOverlay');
+
+        ['dragenter', 'dragover'].forEach(event => {
+            inputContainer.addEventListener(event, (e) => {
+                e.preventDefault();
+                dropOverlay.classList.add('show');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(event => {
+            inputContainer.addEventListener(event, (e) => {
+                e.preventDefault();
+                dropOverlay.classList.remove('show');
+            });
+        });
+
+        inputContainer.addEventListener('drop', (e) => {
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        });
+
+        // Paste handling for images
+        document.addEventListener('paste', (e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    loadImage(file);
+                    break;
+                }
+            }
+        });
+
+        async function translate() {
+            const inputText = document.getElementById('inputText').value.trim();
+            const outputArea = document.getElementById('outputArea');
+            const translateBtn = document.getElementById('translateBtn');
+
+            if (!inputText && !currentImage) {
+                showToast('Please enter text or add an image', true);
+                return;
+            }
+
+            if (!apiKey) {
+                requestApiKey();
+                if (!apiKey) return;
+            }
+
+            // Show loading state
+            translateBtn.disabled = true;
+            translateBtn.innerHTML = '<span class="loading"></span> Processing...';
+            outputArea.innerHTML = '<span class="placeholder-text">Processing...</span>';
+
+            try {
+                // Build message content
+                const content = [];
+
+                if (currentImage) {
+                    content.push({
+                        type: 'image_url',
+                        image_url: {
+                            url: currentImage
+                        }
+                    });
+                }
+
+                if (inputText) {
+                    content.push({
+                        type: 'text',
+                        text: inputText
+                    });
+                } else if (currentImage) {
+                    content.push({
+                        type: 'text',
+                        text: 'Please translate any text visible in this image.'
+                    });
+                }
+
+                const response = await fetch(OPENROUTER_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'HTTP-Referer': window.location.href,
+                        'X-Title': 'Spanish Translator'
+                    },
+                    body: JSON.stringify({
+                        model: MODEL,
+                        messages: [
+                            {
+                                role: 'system',
+                                content: `You are a helpful translator and Spanish language assistant.
+
+Your behavior depends on the input:
+
+1. **If the input is in Spanish**: Translate it to Dutch.
+2. **If the input is in any other language** (including Dutch, English, etc.): Translate it to Spanish.
+3. **If the input is a question about Spanish** (grammar, vocabulary, usage, learning tips, etc.) or a follow-up question: Answer the question directly and helpfully instead of translating.
+
+Rules:
+- Preserve the original formatting, tone, and style when translating
+- For images: extract and translate any visible text following the rules above
+- Be concise but complete
+- If the intent is unclear, default to translation`
+                            },
+                            {
+                                role: 'user',
+                                content: content.length === 1 && content[0].type === 'text' ? content[0].text : content
+                            }
+                        ]
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error?.message || `API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const result = data.choices[0]?.message?.content || 'No response received';
+
+                outputArea.textContent = result;
+
+                // Update language badge
+                if (currentImage) {
+                    document.getElementById('outputLang').textContent = 'Translation';
+                } else {
+                    const isSpanishInput = detectSpanish(inputText);
+                    const isQuestion = detectQuestion(inputText);
+                    if (isQuestion) {
+                        document.getElementById('outputLang').textContent = 'Answer';
+                    } else {
+                        document.getElementById('outputLang').textContent = isSpanishInput ? 'Dutch' : 'Spanish';
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                outputArea.innerHTML = `<span class="placeholder-text" style="color: var(--accent);">Error: ${error.message}</span>`;
+
+                if (error.message.includes('401') || error.message.includes('invalid')) {
+                    showToast('Invalid API key. Please update it.', true);
+                } else {
+                    showToast('Request failed. Please try again.', true);
+                }
+            } finally {
+                translateBtn.disabled = false;
+                translateBtn.innerHTML = `
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
+                    </svg>
+                    Translate
+                `;
+            }
+        }
+
+        // Simple Spanish detection
+        function detectSpanish(text) {
+            const spanishPatterns = /\b(el|la|los|las|un|una|de|del|que|en|es|por|para|con|está|están|este|esta|esto|qué|cómo|dónde|cuándo|porque|pero|muy|más|menos|también|ahora|después|antes|aquí|allí|hola|gracias|buenos|buenas|días|noches|señor|señora|tengo|tiene|hacer|dice|puede|quiero|necesito)\b/i;
+            const spanishChars = /[áéíóúüñ¿¡]/;
+            return spanishPatterns.test(text) || spanishChars.test(text);
+        }
+
+        // Detect if input is a question about Spanish
+        function detectQuestion(text) {
+            const questionPatterns = /\b(how do (you |I )?(say|translate|write|spell)|what does .+ mean|what is .+ in spanish|what's the (word|translation|meaning)|difference between|when to use|how to use|can you explain|why is|is it correct|grammar|conjugat|plural|singular|masculine|feminine|pronunciation|accent)\b/i;
+            return questionPatterns.test(text) || (text.includes('?') && text.length < 100);
+        }
+
+        function clearInput() {
+            document.getElementById('inputText').value = '';
+            document.getElementById('outputArea').innerHTML = '<span class="placeholder-text">Translation will appear here...</span>';
+            document.getElementById('inputLang').textContent = 'Text or Image';
+            document.getElementById('outputLang').textContent = '-';
+            removeImage();
+        }
+
+        async function copyTranslation() {
+            const outputArea = document.getElementById('outputArea');
+            const text = outputArea.textContent;
+
+            if (!text || text.includes('will appear') || text.includes('Error')) {
+                showToast('Nothing to copy', true);
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Copied to clipboard!');
+            } catch {
+                showToast('Failed to copy', true);
+            }
+        }
+
+        // Translate on Ctrl+Enter
+        document.getElementById('inputText').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                translate();
+            }
+        });
+
+        // Check for API key on load
+        checkApiKey();
+    </script>
+</body>
+</html>
