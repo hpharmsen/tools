@@ -162,9 +162,9 @@
 
                 const contents = await response.json();
 
-                // Filter for directories only (excluding special folders)
+                // Filter for directories only (excluding special folders and hidden folders)
                 const folders = contents.filter(item =>
-                    item.type === 'dir' && !EXCLUDED.includes(item.name)
+                    item.type === 'dir' && !EXCLUDED.includes(item.name) && !item.name.startsWith('.')
                 );
 
                 if (folders.length === 0) {
