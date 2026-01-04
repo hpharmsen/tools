@@ -369,7 +369,6 @@
                 <div class="panel-header">
                     <div class="panel-title">
                         Response
-                        <span class="lang-badge" id="outputLang">-</span>
                     </div>
                     <button class="btn btn-small" onclick="copyTranslation()">
                         <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -616,19 +615,6 @@ Rules:
 
                 outputArea.textContent = result;
 
-                // Update language badge
-                if (currentImage) {
-                    document.getElementById('outputLang').textContent = 'Translation';
-                } else {
-                    const isSpanishInput = detectSpanish(inputText);
-                    const isQuestion = detectQuestion(inputText);
-                    if (isQuestion) {
-                        document.getElementById('outputLang').textContent = 'Answer';
-                    } else {
-                        document.getElementById('outputLang').textContent = isSpanishInput ? 'Dutch' : 'Spanish';
-                    }
-                }
-
             } catch (error) {
                 console.error('Translation error:', error);
                 let errorMessage = error.message;
@@ -675,7 +661,6 @@ Rules:
         function clearInput() {
             document.getElementById('inputText').value = '';
             document.getElementById('outputArea').innerHTML = '<span class="placeholder-text">Translation will appear here...</span>';
-            document.getElementById('outputLang').textContent = '-';
             removeImage();
         }
 
