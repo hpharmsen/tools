@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A collection of single-file HTML web tools hosted on GitHub Pages. Each tool is self-contained, serverless, and runs entirely in the browser.
 
+The live version will be at https://tools.harmsen.nl/
+
 ## Architecture
 
 - **Root `index.html`**: Landing page that dynamically loads tools from subdirectories via GitHub API
@@ -63,6 +65,10 @@ Simply report: *"Changes pushed to [branch-name]. Auto-deploy initiated."*
 
 - **URL params/hash**: For shareable state (configurations, small inputs)
 - **localStorage**: For API keys and user preferences (prompt user if missing)
+
+## Testing
+
+- **Always test** the application yourself before reporting back to me.
 
 ## Common Patterns
 
