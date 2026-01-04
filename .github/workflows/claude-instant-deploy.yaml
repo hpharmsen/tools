@@ -1,0 +1,33 @@
+name: Instant Deploy Claude Changes
+on:
+  push:
+    branches:
+      - 'claude/*'  # Triggert alleen als Claude een branch pusht
+
+permissions:
+  contents: write  # Geeft deze actie recht om naar main te schrijven
+
+jobs:
+  sync-to-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0 # Haal alle historie op om te kunnen mergen
+
+      - name: Setup Git
+        run: |
+          git config user.name "Claude Auto Deploy"
+          git config user.email "actions@github.com"
+
+      - name: Merge Claude Branch into Main
+        run: |
+          # Merge de branch die net gepusht is (github.ref_name) in main
+          git merge origin/${{ github.ref_name }} --no-edit
+          git push origin main
+
+      - name: Delete Claude Branch
+        run: |
+          git push origin --delete ${{ github.ref_name }}
