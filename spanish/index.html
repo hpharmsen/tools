@@ -61,29 +61,18 @@
             gap: 20px;
         }
 
-        .controls-mobile {
-            display: none;
-            justify-content: center;
-            padding: 15px 20px;
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--border);
-        }
-
         @media (max-width: 700px) {
             .translator {
                 grid-template-columns: 1fr;
-            }
-            .controls {
-                display: none;
-            }
-            .controls-mobile {
-                display: flex;
             }
             header {
                 display: none;
             }
             .input-container,
             textarea {
+                min-height: 5em;
+            }
+            .output-area {
                 min-height: 5em;
             }
         }
@@ -365,14 +354,6 @@
 • Questions about Spanish → get answered"
                         spellcheck="false"
                     ></textarea>
-                </div>
-                <div class="controls-mobile">
-                    <button class="btn btn-primary" onclick="doTranslate()">
-                        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
-                        </svg>
-                        Translate
-                    </button>
                 </div>
             </div>
 
