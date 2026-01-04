@@ -367,7 +367,7 @@
         </div>
 
         <div class="controls">
-            <button class="btn btn-primary" id="translateBtn" onclick="translate()">
+            <button class="btn btn-primary" id="translateBtn" onclick="doTranslate()">
                 <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
                 </svg>
@@ -498,7 +498,7 @@
             }
         });
 
-        async function translate() {
+        async function doTranslate() {
             const inputText = document.getElementById('inputText').value.trim();
             const outputArea = document.getElementById('outputArea');
             const translateBtn = document.getElementById('translateBtn');
@@ -685,7 +685,7 @@ Rules:
         document.getElementById('inputText').addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                translate();
+                doTranslate();
             }
         });
 
