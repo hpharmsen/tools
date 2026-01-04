@@ -79,8 +79,11 @@
         }
 
         .tool-icon {
-            font-size: 2.5rem;
+            width: 64px;
+            height: 64px;
             margin-bottom: 16px;
+            border-radius: 12px;
+            object-fit: cover;
         }
 
         .tool-name {
@@ -192,7 +195,7 @@
 
                 grid.innerHTML = tools.map(tool => `
                     <a href="${tool.id}/" class="tool-card">
-                        <div class="tool-icon">${tool.icon}</div>
+                        <img class="tool-icon" src="${tool.id}/apple-touch-icon.png" alt="${tool.name}">
                         <div class="tool-name">${tool.name}</div>
                         <div class="tool-description">${tool.description}</div>
                         <span class="tool-arrow">Open tool →</span>
