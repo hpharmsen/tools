@@ -513,10 +513,12 @@
                 if (!apiKey) return;
             }
 
-            // Show loading state
+            // Show loading state immediately
             translateBtn.disabled = true;
-            translateBtn.innerHTML = '<span class="loading"></span> Processing...';
-            outputArea.innerHTML = '<span class="placeholder-text">Processing...</span>';
+            translateBtn.innerHTML = '<span class="loading"></span> Translating...';
+            outputArea.innerHTML = '<span class="placeholder-text"><span class="loading" style="vertical-align: middle; margin-right: 8px;"></span>Connecting to API...</span>';
+
+            console.log('Starting translation request...');
 
             try {
                 // Build message content
@@ -542,6 +544,10 @@
                         text: 'Please translate any text visible in this image.'
                     });
                 }
+
+                // Update status
+                outputArea.innerHTML = '<span class="placeholder-text"><span class="loading" style="vertical-align: middle; margin-right: 8px;"></span>Sending request...</span>';
+                console.log('Sending API request to OpenRouter...');
 
                 const response = await fetch(OPENROUTER_API_URL, {
                     method: 'POST',
@@ -578,12 +584,18 @@ Rules:
                     })
                 });
 
+                console.log('Response status:', response.status);
+
                 if (!response.ok) {
                     const error = await response.json().catch(() => ({}));
+                    console.error('API error:', error);
                     throw new Error(error.error?.message || `API error: ${response.status}`);
                 }
 
+                outputArea.innerHTML = '<span class="placeholder-text"><span class="loading" style="vertical-align: middle; margin-right: 8px;"></span>Processing response...</span>';
+
                 const data = await response.json();
+                console.log('Response received:', data);
                 const result = data.choices[0]?.message?.content || 'No response received';
 
                 outputArea.textContent = result;
@@ -602,14 +614,24 @@ Rules:
                 }
 
             } catch (error) {
-                console.error('Error:', error);
-                outputArea.innerHTML = `<span class="placeholder-text" style="color: var(--accent);">Error: ${error.message}</span>`;
+                console.error('Translation error:', error);
+                let errorMessage = error.message;
 
-                if (error.message.includes('401') || error.message.includes('invalid')) {
+                // Provide more specific error messages
+                if (error.message.includes('401') || error.message.includes('invalid') || error.message.includes('Unauthorized')) {
+                    errorMessage = 'Invalid API key. Click "Change API Key" below to update it.';
                     showToast('Invalid API key. Please update it.', true);
+                } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage = 'Network error. Check your internet connection.';
+                    showToast('Network error. Check connection.', true);
+                } else if (error.message.includes('402') || error.message.includes('Payment')) {
+                    errorMessage = 'API credit issue. Check your OpenRouter balance.';
+                    showToast('Check your OpenRouter credits.', true);
                 } else {
-                    showToast('Request failed. Please try again.', true);
+                    showToast('Request failed. Check console for details.', true);
                 }
+
+                outputArea.innerHTML = `<span class="placeholder-text" style="color: var(--accent);">Error: ${errorMessage}</span>`;
             } finally {
                 translateBtn.disabled = false;
                 translateBtn.innerHTML = `
