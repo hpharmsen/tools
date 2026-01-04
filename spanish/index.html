@@ -329,7 +329,6 @@
                 <div class="panel-header">
                     <div class="panel-title">
                         Input
-                        <span class="lang-badge" id="inputLang">Text or Image</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="btn btn-small" onclick="pasteFromClipboard()" title="Paste from clipboard">
@@ -465,7 +464,6 @@
                 currentImage = e.target.result;
                 document.getElementById('previewImg').src = currentImage;
                 document.getElementById('imagePreview').style.display = 'block';
-                document.getElementById('inputLang').textContent = 'Image';
             };
             reader.readAsDataURL(file);
         }
@@ -474,7 +472,6 @@
             currentImage = null;
             document.getElementById('imagePreview').style.display = 'none';
             document.getElementById('imageInput').value = '';
-            document.getElementById('inputLang').textContent = 'Text or Image';
         }
 
         // Drag and drop
@@ -678,7 +675,6 @@ Rules:
         function clearInput() {
             document.getElementById('inputText').value = '';
             document.getElementById('outputArea').innerHTML = '<span class="placeholder-text">Translation will appear here...</span>';
-            document.getElementById('inputLang').textContent = 'Text or Image';
             document.getElementById('outputLang').textContent = '-';
             removeImage();
         }
