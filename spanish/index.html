@@ -703,6 +703,15 @@ Rules:
             }
         });
 
+        // Auto-translate on paste
+        document.getElementById('inputText').addEventListener('paste', (e) => {
+            setTimeout(() => {
+                if (document.getElementById('inputText').value.trim()) {
+                    doTranslate();
+                }
+            }, 100);
+        });
+
         // Check for API key on load
         checkApiKey();
     </script>
