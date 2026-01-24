@@ -868,23 +868,24 @@
 
         // Position word so focus letter is centered
         const positionWord = (focusIndex, totalLetters) => {
-            // Calculate offset based on letter positions
-            // We need to shift left by the width of letters before the focus letter
-            // and half the width of the focus letter itself
-
             requestAnimationFrame(() => {
                 const letterElements = wordDisplay.querySelectorAll('.letter');
                 if (letterElements.length === 0) return;
 
-                let offsetLeft = 0;
+                // Calculate distance from word's left edge to focus letter's center
+                let focusLetterCenter = 0;
                 for (let i = 0; i < focusIndex; i++) {
-                    offsetLeft += letterElements[i].offsetWidth;
+                    focusLetterCenter += letterElements[i].offsetWidth;
                 }
-                // Add half of focus letter width
-                offsetLeft += letterElements[focusIndex].offsetWidth / 2;
+                focusLetterCenter += letterElements[focusIndex].offsetWidth / 2;
 
-                // Shift word display
-                wordDisplay.style.transform = `translateX(-${offsetLeft}px)`;
+                // Word is centered by flexbox (word center = screen center)
+                // Shift so focus letter center = screen center
+                const wordWidth = wordDisplay.offsetWidth;
+                const wordCenter = wordWidth / 2;
+                const shift = wordCenter - focusLetterCenter;
+
+                wordDisplay.style.transform = `translateX(${shift}px)`;
             });
         };
 
