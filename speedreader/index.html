@@ -969,7 +969,7 @@
             const minutes = Math.floor(totalSeconds / 60);
             const seconds = totalSeconds % 60;
             const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            timerDisplay.textContent = `${state.wordsRead} woorden in ${timeStr}`;
+            timerDisplay.textContent = `${state.wordsRead} · ${timeStr}`;
         };
 
         // Calculate display time for a word
