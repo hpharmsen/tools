@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <title>Speedreader</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect fill='%23000' width='32' height='32'/><text x='16' y='22' text-anchor='middle' fill='%23fff' font-size='18' font-family='system-ui'>▶</text></svg>">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.jsdelivr.net/npm/@mozilla/readability@0.5.0/Readability.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Main reading display */
+        .reader-container {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .word-display {
+            font-size: clamp(2rem, 8vw, 5rem);
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        .word-display .letter {
+            display: inline-block;
+        }
+
+        .word-display .focus-letter {
+            color: #e94560;
+        }
+
+        /* Focus marker */
+        .focus-marker {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #e94560;
+            font-size: 1.5rem;
+            opacity: 0.6;
+        }
+
+        .focus-marker.top {
+            top: calc(50% - 4rem);
+        }
+
+        .focus-marker.bottom {
+            top: calc(50% + 3rem);
+        }
+
+        /* Speed controls - right side */
+        .speed-controls {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .speed-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            min-width: 70px;
+            text-align: center;
+        }
+
+        .speed-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .speed-btn.active {
+            background: #e94560;
+            border-color: #e94560;
+        }
+
+        /* Play/Pause button - bottom */
+        .play-pause-container {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+
+        .play-pause-btn {
+            background: #e94560;
+            border: none;
+            color: #fff;
+            padding: 16px 48px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .play-pause-btn:hover {
+            background: #ff6b6b;
+            transform: scale(1.05);
+        }
+
+        .play-pause-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Progress bar */
+        .progress-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #e94560;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        /* Input overlay */
+        .input-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        .input-overlay.hidden {
+            display: none;
+        }
+
+        .input-box {
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .input-box h2 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .input-box p {
+            color: #888;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .drop-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 16px;
+            padding: 60px 40px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag-over {
+            border-color: #e94560;
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .drop-zone-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .drop-zone-text {
+            font-size: 1.1rem;
+            color: #aaa;
+        }
+
+        .drop-zone-hint {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 15px;
+        }
+
+        /* Resume banner */
+        .resume-banner {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(233, 69, 96, 0.9);
+            padding: 12px 24px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            z-index: 150;
+        }
+
+        .resume-banner.hidden {
+            display: none;
+        }
+
+        .resume-banner button {
+            background: #fff;
+            color: #e94560;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .resume-banner .dismiss {
+            background: transparent;
+            color: #fff;
+            padding: 8px;
+        }
+
+        /* Word count display */
+        .word-count {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #666;
+            font-size: 0.9rem;
+            z-index: 100;
+        }
+
+        /* Loading state */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #e94560;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(50px);
+            background: #333;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 300;
+        }
+
+        .toast.error {
+            background: #e94560;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 600px) {
+            .speed-controls {
+                right: 10px;
+                gap: 6px;
+            }
+
+            .speed-btn {
+                padding: 10px 12px;
+                font-size: 0.8rem;
+                min-width: 55px;
+            }
+
+            .play-pause-btn {
+                padding: 14px 36px;
+                font-size: 1rem;
+            }
+
+            .word-count {
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Focus markers -->
+    <div class="focus-marker top">▼</div>
+    <div class="focus-marker bottom">▲</div>
+
+    <!-- Main reading display -->
+    <div class="reader-container">
+        <div class="word-display" id="wordDisplay"></div>
+    </div>
+
+    <!-- Word count -->
+    <div class="word-count" id="wordCount"></div>
+
+    <!-- Speed controls -->
+    <div class="speed-controls" id="speedControls">
+        <button class="speed-btn" data-speed="300">300</button>
+        <button class="speed-btn" data-speed="450">450</button>
+        <button class="speed-btn active" data-speed="600">600</button>
+        <button class="speed-btn" data-speed="750">750</button>
+        <button class="speed-btn" data-speed="900">900</button>
+    </div>
+
+    <!-- Play/Pause button -->
+    <div class="play-pause-container">
+        <button class="play-pause-btn" id="playPauseBtn">
+            <svg id="playIcon" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+            </svg>
+            <svg id="pauseIcon" fill="currentColor" viewBox="0 0 24 24" style="display:none;">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+            </svg>
+            <span id="playPauseText">Start</span>
+        </button>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <!-- Input overlay -->
+    <div class="input-overlay" id="inputOverlay">
+        <div class="input-box">
+            <h2>Speedreader</h2>
+            <p>Read faster by focusing on one word at a time</p>
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📖</div>
+                <div class="drop-zone-text">Drop text or URL here, or click to paste</div>
+                <div class="drop-zone-hint">Supports: text, URLs to articles, text files</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resume banner -->
+    <div class="resume-banner hidden" id="resumeBanner">
+        <span>You have a saved reading session</span>
+        <button id="resumeBtn">Resume</button>
+        <button class="dismiss" id="dismissBtn">✕</button>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // State
+        const state = {
+            words: [],
+            currentIndex: 0,
+            isPlaying: false,
+            speed: 600, // WPM
+            timeoutId: null,
+            textLoaded: false
+        };
+
+        // DOM elements
+        const wordDisplay = document.getElementById('wordDisplay');
+        const inputOverlay = document.getElementById('inputOverlay');
+        const dropZone = document.getElementById('dropZone');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playIcon = document.getElementById('playIcon');
+        const pauseIcon = document.getElementById('pauseIcon');
+        const playPauseText = document.getElementById('playPauseText');
+        const progressBar = document.getElementById('progressBar');
+        const wordCountDisplay = document.getElementById('wordCount');
+        const resumeBanner = document.getElementById('resumeBanner');
+        const toast = document.getElementById('toast');
+        const speedControls = document.getElementById('speedControls');
+
+        // CORS proxy for fetching URLs
+        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+        // Initialize
+        const init = () => {
+            loadSettings();
+            setupEventListeners();
+            checkUrlParam();
+            checkSavedSession();
+        };
+
+        // Load settings from localStorage
+        const loadSettings = () => {
+            const savedSpeed = localStorage.getItem('speedreader_speed');
+            if (savedSpeed) {
+                state.speed = parseInt(savedSpeed, 10);
+                updateSpeedButtons();
+            }
+        };
+
+        // Save settings to localStorage
+        const saveSettings = () => {
+            localStorage.setItem('speedreader_speed', state.speed.toString());
+        };
+
+        // Save reading session
+        const saveSession = () => {
+            if (state.words.length > 0) {
+                const session = {
+                    words: state.words,
+                    currentIndex: state.currentIndex,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem('speedreader_session', JSON.stringify(session));
+            }
+        };
+
+        // Load saved session
+        const loadSession = () => {
+            const saved = localStorage.getItem('speedreader_session');
+            if (saved) {
+                try {
+                    const session = JSON.parse(saved);
+                    // Only restore if less than 24 hours old
+                    if (Date.now() - session.timestamp < 24 * 60 * 60 * 1000) {
+                        return session;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse saved session:', e);
+                }
+            }
+            return null;
+        };
+
+        // Clear saved session
+        const clearSession = () => {
+            localStorage.removeItem('speedreader_session');
+        };
+
+        // Check for saved session on load
+        const checkSavedSession = () => {
+            const session = loadSession();
+            if (session && session.words.length > 0 && session.currentIndex < session.words.length) {
+                resumeBanner.classList.remove('hidden');
+            }
+        };
+
+        // Setup event listeners
+        const setupEventListeners = () => {
+            // Drop zone events
+            dropZone.addEventListener('click', handleDropZoneClick);
+            dropZone.addEventListener('dragover', handleDragOver);
+            dropZone.addEventListener('dragleave', handleDragLeave);
+            dropZone.addEventListener('drop', handleDrop);
+
+            // Global paste event
+            document.addEventListener('paste', handlePaste);
+
+            // Play/pause button
+            playPauseBtn.addEventListener('click', togglePlayPause);
+
+            // Speed buttons
+            speedControls.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.speed = parseInt(btn.dataset.speed, 10);
+                    updateSpeedButtons();
+                    saveSettings();
+                });
+            });
+
+            // Resume banner
+            document.getElementById('resumeBtn').addEventListener('click', () => {
+                const session = loadSession();
+                if (session) {
+                    state.words = session.words;
+                    state.currentIndex = session.currentIndex;
+                    state.textLoaded = true;
+                    inputOverlay.classList.add('hidden');
+                    resumeBanner.classList.add('hidden');
+                    updateWordCount();
+                    displayWord();
+                }
+            });
+
+            document.getElementById('dismissBtn').addEventListener('click', () => {
+                resumeBanner.classList.add('hidden');
+                clearSession();
+            });
+
+            // Keyboard controls
+            document.addEventListener('keydown', handleKeydown);
+
+            // Click on reader to toggle play/pause
+            document.querySelector('.reader-container').addEventListener('click', (e) => {
+                if (state.textLoaded && e.target.closest('.reader-container')) {
+                    togglePlayPause();
+                }
+            });
+        };
+
+        // Handle keyboard shortcuts
+        const handleKeydown = (e) => {
+            if (!state.textLoaded) return;
+
+            switch (e.code) {
+                case 'Space':
+                    e.preventDefault();
+                    togglePlayPause();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    skipWords(-10);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    skipWords(10);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    changeSpeed(150);
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    changeSpeed(-150);
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    resetReader();
+                    break;
+            }
+        };
+
+        // Skip words forward/backward
+        const skipWords = (count) => {
+            state.currentIndex = Math.max(0, Math.min(state.words.length - 1, state.currentIndex + count));
+            saveSession();
+            displayWord();
+            updateProgress();
+        };
+
+        // Change speed
+        const changeSpeed = (delta) => {
+            const speeds = [300, 450, 600, 750, 900];
+            const currentIdx = speeds.indexOf(state.speed);
+            if (delta > 0 && currentIdx < speeds.length - 1) {
+                state.speed = speeds[currentIdx + 1];
+            } else if (delta < 0 && currentIdx > 0) {
+                state.speed = speeds[currentIdx - 1];
+            }
+            updateSpeedButtons();
+            saveSettings();
+        };
+
+        // Update speed button states
+        const updateSpeedButtons = () => {
+            speedControls.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.speed, 10) === state.speed);
+            });
+        };
+
+        // Handle drop zone click
+        const handleDropZoneClick = async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text.trim()) {
+                    processInput(text.trim());
+                } else {
+                    showToast('Clipboard is empty', true);
+                }
+            } catch (err) {
+                showToast('Cannot access clipboard. Try pasting with Ctrl+V', true);
+            }
+        };
+
+        // Handle drag over
+        const handleDragOver = (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        };
+
+        // Handle drag leave
+        const handleDragLeave = () => {
+            dropZone.classList.remove('drag-over');
+        };
+
+        // Handle drop
+        const handleDrop = async (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+
+            // Check for files (text files)
+            if (e.dataTransfer.files.length > 0) {
+                const file = e.dataTransfer.files[0];
+                if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                    const text = await file.text();
+                    processInput(text);
+                    return;
+                }
+            }
+
+            // Check for text/URL
+            const text = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list');
+            if (text) {
+                processInput(text.trim());
+            }
+        };
+
+        // Handle paste
+        const handlePaste = (e) => {
+            // Only handle if input overlay is visible
+            if (!inputOverlay.classList.contains('hidden')) {
+                return; // Let default paste behavior work when overlay is hidden
+            }
+
+            const text = e.clipboardData.getData('text/plain');
+            if (text) {
+                e.preventDefault();
+                processInput(text.trim());
+            }
+        };
+
+        // Process input (text or URL)
+        const processInput = async (input) => {
+            // Check if it's a URL
+            if (isUrl(input)) {
+                await fetchAndParseUrl(input);
+            } else {
+                loadText(input);
+            }
+        };
+
+        // Check if input is a URL
+        const isUrl = (str) => {
+            try {
+                const url = new URL(str);
+                return url.protocol === 'http:' || url.protocol === 'https:';
+            } catch {
+                return false;
+            }
+        };
+
+        // Fetch and parse URL content
+        const fetchAndParseUrl = async (url) => {
+            showLoading('Fetching article...');
+
+            try {
+                const response = await fetch(CORS_PROXY + encodeURIComponent(url));
+                if (!response.ok) throw new Error('Failed to fetch URL');
+
+                const html = await response.text();
+
+                // Parse with Readability
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // Set base URL for relative links
+                const base = doc.createElement('base');
+                base.href = url;
+                doc.head.appendChild(base);
+
+                const reader = new Readability(doc);
+                const article = reader.parse();
+
+                if (article && article.textContent) {
+                    loadText(article.textContent);
+                } else {
+                    throw new Error('Could not extract article content');
+                }
+            } catch (err) {
+                console.error('URL fetch error:', err);
+                showToast('Failed to fetch article. Try pasting the text directly.', true);
+                hideLoading();
+            }
+        };
+
+        // Show loading state
+        const showLoading = (message) => {
+            dropZone.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>${message}</div>
+                </div>
+            `;
+        };
+
+        // Hide loading state
+        const hideLoading = () => {
+            dropZone.innerHTML = `
+                <div class="drop-zone-icon">📖</div>
+                <div class="drop-zone-text">Drop text or URL here, or click to paste</div>
+                <div class="drop-zone-hint">Supports: text, URLs to articles, text files</div>
+            `;
+        };
+
+        // Load text into reader
+        const loadText = (text) => {
+            // Clean and split into words
+            const cleanText = text
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            state.words = cleanText.split(' ').filter(word => word.length > 0);
+            state.currentIndex = 0;
+            state.textLoaded = true;
+
+            if (state.words.length === 0) {
+                showToast('No text found', true);
+                hideLoading();
+                return;
+            }
+
+            // Hide input overlay and resume banner
+            inputOverlay.classList.add('hidden');
+            resumeBanner.classList.add('hidden');
+            clearSession();
+
+            // Update display
+            updateWordCount();
+            displayWord();
+
+            // Auto-start
+            togglePlayPause();
+        };
+
+        // Display current word
+        const displayWord = () => {
+            if (state.currentIndex >= state.words.length) {
+                // End of text
+                pause();
+                showToast('Finished!');
+                clearSession();
+                return;
+            }
+
+            const word = state.words[state.currentIndex];
+            const focusIndex = getFocusIndex(word);
+
+            // Build HTML with focus letter highlighted
+            let html = '';
+            const letters = [...word]; // Handle unicode properly
+
+            for (let i = 0; i < letters.length; i++) {
+                if (i === focusIndex) {
+                    html += `<span class="letter focus-letter">${escapeHtml(letters[i])}</span>`;
+                } else {
+                    html += `<span class="letter">${escapeHtml(letters[i])}</span>`;
+                }
+            }
+
+            wordDisplay.innerHTML = html;
+
+            // Position word so focus letter is centered
+            positionWord(focusIndex, letters.length);
+
+            // Update progress
+            updateProgress();
+        };
+
+        // Get the index of the focus letter (middle, or one left if even)
+        const getFocusIndex = (word) => {
+            const letters = [...word];
+            const len = letters.length;
+            if (len <= 1) return 0;
+            if (len % 2 === 0) {
+                return Math.floor(len / 2) - 1;
+            }
+            return Math.floor(len / 2);
+        };
+
+        // Position word so focus letter is centered
+        const positionWord = (focusIndex, totalLetters) => {
+            // Calculate offset based on letter positions
+            // We need to shift left by the width of letters before the focus letter
+            // and half the width of the focus letter itself
+
+            requestAnimationFrame(() => {
+                const letterElements = wordDisplay.querySelectorAll('.letter');
+                if (letterElements.length === 0) return;
+
+                let offsetLeft = 0;
+                for (let i = 0; i < focusIndex; i++) {
+                    offsetLeft += letterElements[i].offsetWidth;
+                }
+                // Add half of focus letter width
+                offsetLeft += letterElements[focusIndex].offsetWidth / 2;
+
+                // Shift word display
+                wordDisplay.style.transform = `translateX(-${offsetLeft}px)`;
+            });
+        };
+
+        // Escape HTML
+        const escapeHtml = (str) => {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        };
+
+        // Update word count display
+        const updateWordCount = () => {
+            wordCountDisplay.textContent = `${state.currentIndex + 1} / ${state.words.length}`;
+        };
+
+        // Update progress bar
+        const updateProgress = () => {
+            const progress = (state.currentIndex / state.words.length) * 100;
+            progressBar.style.width = `${progress}%`;
+            updateWordCount();
+        };
+
+        // Calculate display time for a word
+        const getWordDisplayTime = (word) => {
+            const baseTime = 60000 / state.speed; // ms per word at base speed
+            const baseLength = 4;
+            const wordLength = word.length;
+
+            // Adjust time based on word length
+            let time = baseTime * (wordLength / baseLength);
+
+            // Minimum display time
+            time = Math.max(time, baseTime * 0.5);
+
+            // Extra time for end of sentence
+            if (/[.!?]$/.test(word)) {
+                time *= 1.5;
+            }
+            // Slight extra time for comma/semicolon
+            else if (/[,;:]$/.test(word)) {
+                time *= 1.2;
+            }
+
+            return time;
+        };
+
+        // Toggle play/pause
+        const togglePlayPause = () => {
+            if (state.isPlaying) {
+                pause();
+            } else {
+                play();
+            }
+        };
+
+        // Play
+        const play = () => {
+            if (!state.textLoaded || state.currentIndex >= state.words.length) return;
+
+            state.isPlaying = true;
+            playIcon.style.display = 'none';
+            pauseIcon.style.display = 'block';
+            playPauseText.textContent = 'Pause';
+
+            scheduleNextWord();
+        };
+
+        // Pause
+        const pause = () => {
+            state.isPlaying = false;
+            playIcon.style.display = 'block';
+            pauseIcon.style.display = 'none';
+            playPauseText.textContent = 'Start';
+
+            if (state.timeoutId) {
+                clearTimeout(state.timeoutId);
+                state.timeoutId = null;
+            }
+
+            saveSession();
+        };
+
+        // Schedule next word
+        const scheduleNextWord = () => {
+            if (!state.isPlaying) return;
+
+            const word = state.words[state.currentIndex];
+            const displayTime = getWordDisplayTime(word);
+
+            state.timeoutId = setTimeout(() => {
+                state.currentIndex++;
+                if (state.currentIndex < state.words.length) {
+                    displayWord();
+                    scheduleNextWord();
+                } else {
+                    displayWord(); // Will show "Finished!"
+                }
+            }, displayTime);
+        };
+
+        // Reset reader
+        const resetReader = () => {
+            pause();
+            state.words = [];
+            state.currentIndex = 0;
+            state.textLoaded = false;
+            wordDisplay.innerHTML = '';
+            progressBar.style.width = '0%';
+            wordCountDisplay.textContent = '';
+            inputOverlay.classList.remove('hidden');
+            hideLoading();
+            clearSession();
+        };
+
+        // Show toast message
+        const showToast = (message, isError = false) => {
+            toast.textContent = message;
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        };
+
+        // Check URL parameter for text or URL
+        const checkUrlParam = () => {
+            const params = new URLSearchParams(window.location.search);
+            const url = params.get('url');
+            const text = params.get('text');
+
+            if (url) {
+                processInput(url);
+            } else if (text) {
+                processInput(text);
+            }
+        };
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
