@@ -269,6 +269,17 @@
             z-index: 100;
         }
 
+        /* Timer display */
+        .timer-display {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #555;
+            font-size: 0.85rem;
+            z-index: 100;
+            font-variant-numeric: tabular-nums;
+        }
+
         /* Loading state */
         .loading {
             display: flex;
@@ -355,6 +366,9 @@
     <!-- Word count -->
     <div class="word-count" id="wordCount"></div>
 
+    <!-- Timer display -->
+    <div class="timer-display" id="timerDisplay"></div>
+
     <!-- Bottom controls -->
     <div class="bottom-controls">
         <!-- Speed controls -->
@@ -416,7 +430,12 @@
             isPlaying: false,
             speed: 600, // WPM
             timeoutId: null,
-            textLoaded: false
+            textLoaded: false,
+            // Timer state
+            timerStartTime: null,
+            timerElapsed: 0,
+            timerIntervalId: null,
+            wordsRead: 0
         };
 
         // DOM elements
@@ -432,6 +451,7 @@
         const resumeBanner = document.getElementById('resumeBanner');
         const toast = document.getElementById('toast');
         const speedControls = document.getElementById('speedControls');
+        const timerDisplay = document.getElementById('timerDisplay');
 
         // CORS proxy for fetching URLs
         const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
@@ -794,6 +814,9 @@
             resumeBanner.classList.add('hidden');
             clearSession();
 
+            // Reset timer for new text
+            resetTimer();
+
             // Update display
             updateWordCount();
             displayWord();
@@ -908,6 +931,45 @@
             updateWordCount();
         };
 
+        // Timer functions
+        const startTimer = () => {
+            if (state.timerIntervalId) return; // Already running
+            state.timerStartTime = Date.now();
+            state.timerIntervalId = setInterval(updateTimerDisplay, 1000);
+            updateTimerDisplay();
+        };
+
+        const stopTimer = () => {
+            if (state.timerIntervalId) {
+                // Save elapsed time
+                if (state.timerStartTime) {
+                    state.timerElapsed += Date.now() - state.timerStartTime;
+                }
+                clearInterval(state.timerIntervalId);
+                state.timerIntervalId = null;
+                state.timerStartTime = null;
+            }
+        };
+
+        const resetTimer = () => {
+            stopTimer();
+            state.timerElapsed = 0;
+            state.wordsRead = 0;
+            timerDisplay.textContent = '';
+        };
+
+        const updateTimerDisplay = () => {
+            let totalMs = state.timerElapsed;
+            if (state.timerStartTime) {
+                totalMs += Date.now() - state.timerStartTime;
+            }
+            const totalSeconds = Math.floor(totalMs / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            timerDisplay.textContent = `${state.wordsRead} woorden in ${timeStr}`;
+        };
+
         // Calculate display time for a word
         const getWordDisplayTime = (word) => {
             const baseTime = 60000 / state.speed; // ms per word at base speed
@@ -950,6 +1012,7 @@
             pauseIcon.style.display = 'block';
             playPauseText.textContent = 'Pause';
 
+            startTimer();
             scheduleNextWord();
         };
 
@@ -965,6 +1028,7 @@
                 state.timeoutId = null;
             }
 
+            stopTimer();
             saveSession();
         };
 
@@ -974,6 +1038,9 @@
 
             const word = state.words[state.currentIndex];
             const displayTime = getWordDisplayTime(word);
+
+            // Count this word as read
+            state.wordsRead++;
 
             state.timeoutId = setTimeout(() => {
                 state.currentIndex++;
@@ -989,6 +1056,7 @@
         // Reset reader
         const resetReader = () => {
             pause();
+            resetTimer();
             state.words = [];
             state.currentIndex = 0;
             state.textLoaded = false;
