@@ -978,8 +978,9 @@
             const baseLength = 4;
             const wordLength = word.length;
 
-            // Adjust time based on word length
-            let time = baseTime * (wordLength / baseLength);
+            // Adjust time based on word length using square root
+            // A word n times as long gets √n times more display time
+            let time = baseTime * Math.sqrt(wordLength / baseLength);
 
             // Minimum display time
             time = Math.max(time, baseTime * 0.5);
