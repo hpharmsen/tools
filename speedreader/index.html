@@ -774,14 +774,16 @@
                 .replace(/\s+/g, ' ')
                 .trim();
 
-            // Split into words, handling cases like "word.Word" or "end.Start"
+            // Split into words, handling cases like "word.Word" or "end."Start"
             const rawWords = cleanText.split(' ').filter(word => word.length > 0);
             state.words = [];
 
             for (const word of rawWords) {
-                // Split on punctuation followed by uppercase letter (new sentence)
-                // e.g., "hello.World" -> ["hello.", "World"]
-                const parts = word.split(/([.!?])(?=[A-Z])/);
+                // Split on sentence-ending punctuation followed by:
+                // - Optional quote then uppercase letter (new sentence)
+                // - Quote then any letter (new quoted text)
+                // Handles straight and curly quotes: " ' " " ' '
+                const parts = word.split(/([.!?])(?=["'""'']?[A-Z]|["'""''][a-zA-Z])/);
 
                 if (parts.length > 1) {
                     // Recombine punctuation with preceding word
