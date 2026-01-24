@@ -269,6 +269,31 @@
             z-index: 100;
         }
 
+        /* New text button */
+        .new-text-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #666;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            z-index: 100;
+            display: none;
+        }
+
+        .new-text-btn.show {
+            display: block;
+        }
+
+        .new-text-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
         /* Timer display */
         .timer-display {
             position: fixed;
@@ -432,6 +457,9 @@
     <!-- Word count -->
     <div class="word-count" id="wordCount"></div>
 
+    <!-- New text button -->
+    <button class="new-text-btn" id="newTextBtn">+ Nieuw</button>
+
     <!-- Timer display -->
     <div class="timer-display" id="timerDisplay"></div>
 
@@ -527,6 +555,7 @@
         const toast = document.getElementById('toast');
         const speedControls = document.getElementById('speedControls');
         const timerDisplay = document.getElementById('timerDisplay');
+        const newTextBtn = document.getElementById('newTextBtn');
         const debugBtn = document.getElementById('debugBtn');
         const debugOverlay = document.getElementById('debugOverlay');
         const debugWordList = document.getElementById('debugWordList');
@@ -653,6 +682,11 @@
 
             // Debug button
             debugBtn.addEventListener('click', showDebugOverlay);
+
+            // New text button
+            newTextBtn.addEventListener('click', () => {
+                resetReader();
+            });
             debugCloseBtn.addEventListener('click', hideDebugOverlay);
         };
 
@@ -915,9 +949,10 @@
                 return;
             }
 
-            // Hide input overlay and resume banner
+            // Hide input overlay and resume banner, show new text button
             inputOverlay.classList.add('hidden');
             resumeBanner.classList.add('hidden');
+            newTextBtn.classList.add('show');
             clearSession();
 
             // Reset timer for new text
@@ -1200,6 +1235,7 @@
             progressBar.style.width = '0%';
             wordCountDisplay.textContent = '';
             inputOverlay.classList.remove('hidden');
+            newTextBtn.classList.remove('show');
             hideLoading();
             clearSession();
         };
