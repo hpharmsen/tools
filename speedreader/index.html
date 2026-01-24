@@ -40,6 +40,8 @@
             letter-spacing: 0.05em;
             white-space: nowrap;
             position: relative;
+            max-width: 90vw;
+            transition: font-size 0.1s ease;
         }
 
         .word-display .letter {
@@ -68,29 +70,37 @@
             top: calc(50% + 3rem);
         }
 
-        /* Speed controls - right side */
-        .speed-controls {
+        /* Bottom controls container */
+        .bottom-controls {
             position: fixed;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            align-items: center;
+            gap: 20px;
             z-index: 100;
+        }
+
+        /* Speed controls - bottom, horizontal */
+        .speed-controls {
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
         }
 
         .speed-btn {
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
             color: #fff;
-            padding: 12px 16px;
+            padding: 10px 16px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             font-weight: 500;
             transition: all 0.2s;
-            min-width: 70px;
+            min-width: 50px;
             text-align: center;
         }
 
@@ -103,13 +113,8 @@
             border-color: #e94560;
         }
 
-        /* Play/Pause button - bottom */
+        /* Play/Pause button */
         .play-pause-container {
-            position: fixed;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 100;
         }
 
         .play-pause-btn {
@@ -311,20 +316,24 @@
 
         /* Mobile adjustments */
         @media (max-width: 600px) {
+            .bottom-controls {
+                bottom: 20px;
+                gap: 15px;
+            }
+
             .speed-controls {
-                right: 10px;
-                gap: 6px;
+                gap: 4px;
             }
 
             .speed-btn {
-                padding: 10px 12px;
-                font-size: 0.8rem;
-                min-width: 55px;
+                padding: 8px 10px;
+                font-size: 0.75rem;
+                min-width: 40px;
             }
 
             .play-pause-btn {
-                padding: 14px 36px;
-                font-size: 1rem;
+                padding: 12px 28px;
+                font-size: 0.95rem;
             }
 
             .word-count {
@@ -346,26 +355,29 @@
     <!-- Word count -->
     <div class="word-count" id="wordCount"></div>
 
-    <!-- Speed controls -->
-    <div class="speed-controls" id="speedControls">
-        <button class="speed-btn" data-speed="300">300</button>
-        <button class="speed-btn" data-speed="450">450</button>
-        <button class="speed-btn active" data-speed="600">600</button>
-        <button class="speed-btn" data-speed="750">750</button>
-        <button class="speed-btn" data-speed="900">900</button>
-    </div>
+    <!-- Bottom controls -->
+    <div class="bottom-controls">
+        <!-- Speed controls -->
+        <div class="speed-controls" id="speedControls">
+            <button class="speed-btn" data-speed="300">300</button>
+            <button class="speed-btn" data-speed="450">450</button>
+            <button class="speed-btn active" data-speed="600">600</button>
+            <button class="speed-btn" data-speed="750">750</button>
+            <button class="speed-btn" data-speed="900">900</button>
+        </div>
 
-    <!-- Play/Pause button -->
-    <div class="play-pause-container">
-        <button class="play-pause-btn" id="playPauseBtn">
-            <svg id="playIcon" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z"/>
-            </svg>
-            <svg id="pauseIcon" fill="currentColor" viewBox="0 0 24 24" style="display:none;">
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-            </svg>
-            <span id="playPauseText">Start</span>
-        </button>
+        <!-- Play/Pause button -->
+        <div class="play-pause-container">
+            <button class="play-pause-btn" id="playPauseBtn">
+                <svg id="playIcon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg id="pauseIcon" fill="currentColor" viewBox="0 0 24 24" style="display:none;">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+                <span id="playPauseText">Start</span>
+            </button>
+        </div>
     </div>
 
     <!-- Progress bar -->
@@ -737,12 +749,37 @@
 
         // Load text into reader
         const loadText = (text) => {
-            // Clean and split into words
+            // Clean text
             const cleanText = text
                 .replace(/\s+/g, ' ')
                 .trim();
 
-            state.words = cleanText.split(' ').filter(word => word.length > 0);
+            // Split into words, handling cases like "word.Word" or "end.Start"
+            const rawWords = cleanText.split(' ').filter(word => word.length > 0);
+            state.words = [];
+
+            for (const word of rawWords) {
+                // Split on punctuation followed by uppercase letter (new sentence)
+                // e.g., "hello.World" -> ["hello.", "World"]
+                const parts = word.split(/([.!?])(?=[A-Z])/);
+
+                if (parts.length > 1) {
+                    // Recombine punctuation with preceding word
+                    for (let i = 0; i < parts.length; i++) {
+                        if (parts[i].length === 1 && /[.!?]/.test(parts[i])) {
+                            // This is punctuation, append to previous if exists
+                            if (state.words.length > 0) {
+                                state.words[state.words.length - 1] += parts[i];
+                            }
+                        } else if (parts[i].length > 0) {
+                            state.words.push(parts[i]);
+                        }
+                    }
+                } else {
+                    state.words.push(word);
+                }
+            }
+
             state.currentIndex = 0;
             state.textLoaded = true;
 
@@ -790,13 +827,32 @@
                 }
             }
 
+            // Reset font size before measuring
+            wordDisplay.style.fontSize = '';
             wordDisplay.innerHTML = html;
+
+            // Scale down long words to fit screen
+            scaleWordToFit();
 
             // Position word so focus letter is centered
             positionWord(focusIndex, letters.length);
 
             // Update progress
             updateProgress();
+        };
+
+        // Scale word to fit within viewport
+        const scaleWordToFit = () => {
+            const maxWidth = window.innerWidth * 0.85;
+            const currentWidth = wordDisplay.scrollWidth;
+
+            if (currentWidth > maxWidth) {
+                const scale = maxWidth / currentWidth;
+                const computedStyle = window.getComputedStyle(wordDisplay);
+                const currentFontSize = parseFloat(computedStyle.fontSize);
+                const newFontSize = currentFontSize * scale;
+                wordDisplay.style.fontSize = `${newFontSize}px`;
+            }
         };
 
         // Get the index of the focus letter (middle, or one left if even)
