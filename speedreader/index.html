@@ -785,16 +785,15 @@
             }
         };
 
-        // Handle paste
+        // Handle paste - always accept new text
         const handlePaste = (e) => {
-            // Only handle if input overlay is visible
-            if (!inputOverlay.classList.contains('hidden')) {
-                return; // Let default paste behavior work when overlay is hidden
-            }
-
             const text = e.clipboardData.getData('text/plain');
-            if (text) {
+            if (text && text.trim().length > 0) {
                 e.preventDefault();
+                // Stop current playback if running
+                if (state.isPlaying) {
+                    pause();
+                }
                 processInput(text.trim());
             }
         };
