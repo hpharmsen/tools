@@ -939,13 +939,28 @@
                     audioUrl = episodeData.audioUrl;
                     showEpisodeInfo(episodeData);
                 } else if (!isAudioUrl(url)) {
-                    // Try to fetch and check if it's RSS
+                    // Try to fetch and check content type
                     updateStatus('Inhoud controleren...');
                     const content = await fetchWithCors(url);
+
                     if (content.includes('<rss') || content.includes('<feed')) {
+                        // It's an RSS feed
                         episodeData = parseRssFeed(content);
                         audioUrl = episodeData.audioUrl;
                         showEpisodeInfo(episodeData);
+                    } else if (content.includes('<html') || content.includes('<!DOCTYPE')) {
+                        // It's an HTML page - try to extract audio URL
+                        const extracted = extractAudioFromHtml(content, url);
+                        if (extracted) {
+                            audioUrl = extracted.audioUrl;
+                            if (extracted.title) {
+                                showEpisodeInfo({ title: extracted.title, pubDate: '' });
+                            }
+                        } else {
+                            showToast('Geen audio gevonden op deze pagina', true);
+                            hideStatus();
+                            return;
+                        }
                     } else {
                         showToast('URL is geen podcast feed of audio bestand', true);
                         hideStatus();
@@ -1028,6 +1043,76 @@
             return lower.includes('.mp3') || lower.includes('.m4a') ||
                    lower.includes('.wav') || lower.includes('.ogg') ||
                    lower.includes('audio');
+        };
+
+        // Extract audio URL from HTML page (for podcast players like Overcast, etc.)
+        const extractAudioFromHtml = (html, pageUrl) => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            let audioUrl = null;
+            let title = null;
+
+            // Try to get title
+            const ogTitle = doc.querySelector('meta[property="og:title"]');
+            const pageTitle = doc.querySelector('title');
+            title = ogTitle?.content || pageTitle?.textContent || null;
+
+            // Method 1: Look for og:audio meta tag
+            const ogAudio = doc.querySelector('meta[property="og:audio"]');
+            if (ogAudio?.content) {
+                audioUrl = ogAudio.content;
+            }
+
+            // Method 2: Look for <audio> element with source
+            if (!audioUrl) {
+                const audioEl = doc.querySelector('audio');
+                if (audioEl) {
+                    const source = audioEl.querySelector('source[src]');
+                    audioUrl = source?.src || audioEl.src;
+                }
+            }
+
+            // Method 3: Look for direct audio links in the HTML
+            if (!audioUrl) {
+                const audioPatterns = [
+                    /["'](https?:\/\/[^"']+\.mp3[^"']*)/gi,
+                    /["'](https?:\/\/[^"']+\.m4a[^"']*)/gi,
+                    /["'](https?:\/\/[^"']+\/audio\/[^"']+)/gi,
+                    /data-url=["']([^"']+\.mp3[^"']*)/gi
+                ];
+
+                for (const pattern of audioPatterns) {
+                    const matches = html.matchAll(pattern);
+                    for (const match of matches) {
+                        // Skip tracking/analytics URLs
+                        if (!match[1].includes('tracking') && !match[1].includes('analytics')) {
+                            audioUrl = match[1];
+                            break;
+                        }
+                    }
+                    if (audioUrl) break;
+                }
+            }
+
+            // Method 4: Overcast-specific - look for audio source in script
+            if (!audioUrl && pageUrl.includes('overcast.fm')) {
+                const sourceMatch = html.match(/source\s+src=["']([^"']+)/);
+                if (sourceMatch) {
+                    audioUrl = sourceMatch[1];
+                }
+            }
+
+            if (audioUrl) {
+                // Make relative URLs absolute
+                if (audioUrl.startsWith('/')) {
+                    const base = new URL(pageUrl);
+                    audioUrl = base.origin + audioUrl;
+                }
+                return { audioUrl, title };
+            }
+
+            return null;
         };
 
         // Get filename from URL
