@@ -434,8 +434,50 @@
             display: none;
         }
 
+        .url-input-row {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 15px;
+        }
+
+        .url-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: #fff;
+            font-size: 0.95rem;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        .url-input::placeholder {
+            color: #666;
+        }
+
+        .go-btn {
+            background: #e94560;
+            border: none;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .go-btn:hover {
+            background: #ff6b6b;
+        }
+
         .file-select-btn {
-            margin-top: 15px;
+            margin-top: 10px;
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
             color: #aaa;
@@ -552,9 +594,12 @@
         <!-- Drop Zone -->
         <div class="drop-zone" id="dropZone">
             <div class="drop-zone-icon">🎧</div>
-            <div class="drop-zone-text">Plak URL (Ctrl+V) of drop bestand hier</div>
-            <div class="drop-zone-hint">Ondersteunt: MP3/M4A/WAV bestanden, podcast URLs, RSS feeds</div>
-            <button class="file-select-btn" id="fileSelectBtn">Of kies bestand...</button>
+            <div class="url-input-row">
+                <input type="url" class="url-input" id="urlInput" placeholder="Plak podcast URL hier...">
+                <button class="go-btn" id="goBtn">Start</button>
+            </div>
+            <div class="drop-zone-hint">Of drop een audio bestand</div>
+            <button class="file-select-btn" id="fileSelectBtn">Kies bestand...</button>
         </div>
         <input type="file" class="file-input" id="fileInput" accept="audio/*">
 
@@ -628,6 +673,8 @@
         const apiKeyInput = document.getElementById('apiKey');
         const saveApiKeyBtn = document.getElementById('saveApiKey');
         const dropZone = document.getElementById('dropZone');
+        const urlInput = document.getElementById('urlInput');
+        const goBtn = document.getElementById('goBtn');
         const fileInput = document.getElementById('fileInput');
         const fileSelectBtn = document.getElementById('fileSelectBtn');
         const translateToggle = document.getElementById('translateToggle');
@@ -700,7 +747,17 @@
                 saveTimeout = setTimeout(saveApiKey, 500);
             });
 
-            // Drop zone (drag/drop only, no click)
+            // URL input
+            goBtn.addEventListener('click', handleUrlSubmit);
+            urlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleUrlSubmit();
+            });
+            // Auto-submit when pasting into URL input
+            urlInput.addEventListener('paste', () => {
+                setTimeout(handleUrlSubmit, 100);
+            });
+
+            // Drop zone (drag/drop only)
             dropZone.addEventListener('dragover', handleDragOver);
             dropZone.addEventListener('dragleave', handleDragLeave);
             dropZone.addEventListener('drop', handleDrop);
@@ -731,6 +788,19 @@
 
             // Download button
             downloadBtn.addEventListener('click', downloadTranscript);
+        };
+
+        // Handle URL submit from input field
+        const handleUrlSubmit = () => {
+            const url = urlInput.value.trim();
+            if (url) {
+                if (isValidUrl(url)) {
+                    processUrl(url);
+                    urlInput.value = '';
+                } else {
+                    showToast('Voer een geldige URL in', true);
+                }
+            }
         };
 
         // Handle file selection
@@ -774,23 +844,19 @@
             }
         };
 
-        // Handle paste
+        // Handle paste (for desktop - paste anywhere on page)
         const handlePaste = (e) => {
-            // Ignore if pasting into API key input
-            if (e.target === apiKeyInput) return;
+            // Ignore if pasting into input fields
+            if (e.target === apiKeyInput || e.target === urlInput) return;
 
             const text = e.clipboardData.getData('text/plain');
             if (text && text.trim()) {
-                e.preventDefault();
                 const input = text.trim();
-                // Check if it's a URL or audio file path
                 if (isValidUrl(input)) {
+                    e.preventDefault();
                     processUrl(input);
-                } else {
-                    showToast('Plak een geldige URL (podcast of RSS feed)', true);
                 }
-            } else {
-                showToast('Klembord is leeg of bevat geen tekst', true);
+                // Don't show error - user might be pasting something else
             }
         };
 
