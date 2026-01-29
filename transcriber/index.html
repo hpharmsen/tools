@@ -655,7 +655,11 @@
 
     <script>
         // Constants
-        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+        const CORS_PROXIES = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
         const MAX_CHUNK_SIZE = 24 * 1024 * 1024; // 24MB to be safe (Whisper limit is 25MB)
 
         // State
@@ -1128,11 +1132,19 @@
 
         // Fetch with CORS proxy
         const fetchWithCors = async (url) => {
-            const response = await fetch(CORS_PROXY + encodeURIComponent(url), {
-                signal: state.abortController?.signal
-            });
-            if (!response.ok) throw new Error('Kon URL niet ophalen');
-            return await response.text();
+            for (const proxy of CORS_PROXIES) {
+                try {
+                    const response = await fetch(proxy + encodeURIComponent(url), {
+                        signal: state.abortController?.signal
+                    });
+                    if (response.ok) {
+                        return await response.text();
+                    }
+                } catch (e) {
+                    console.log('Proxy failed for text:', proxy, e.message);
+                }
+            }
+            throw new Error('Kon URL niet ophalen');
         };
 
         // Fetch latest episode from RSS feed
@@ -1210,24 +1222,42 @@
 
         // Download audio file
         const downloadAudio = async (url) => {
+            console.log('Downloading audio from:', url);
+
             // Try direct fetch first
             try {
                 const response = await fetch(url, {
                     signal: state.abortController?.signal
                 });
                 if (response.ok) {
+                    console.log('Direct fetch succeeded');
                     return await response.blob();
                 }
             } catch (e) {
-                // If CORS error, try with proxy
+                console.log('Direct fetch failed:', e.message);
             }
 
-            // Try with CORS proxy
-            const response = await fetch(CORS_PROXY + encodeURIComponent(url), {
-                signal: state.abortController?.signal
-            });
-            if (!response.ok) throw new Error('Kon audio niet downloaden');
-            return await response.blob();
+            // Try CORS proxies
+            for (const proxy of CORS_PROXIES) {
+                try {
+                    console.log('Trying proxy:', proxy);
+                    const proxyUrl = proxy + encodeURIComponent(url);
+                    const response = await fetch(proxyUrl, {
+                        signal: state.abortController?.signal
+                    });
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        if (blob.size > 1000) { // Make sure we got actual content
+                            console.log('Proxy succeeded:', proxy);
+                            return blob;
+                        }
+                    }
+                } catch (e) {
+                    console.log('Proxy failed:', proxy, e.message);
+                }
+            }
+
+            throw new Error(`Kon audio niet downloaden: ${url}`);
         };
 
         // Transcribe audio using OpenAI Whisper (returns segments with timestamps)
