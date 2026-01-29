@@ -578,7 +578,7 @@
 
         <!-- API Key Section -->
         <div class="api-key-section">
-            <label for="apiKey">OpenAI API Key</label>
+            <label for="apiKey">OpenAI API Key <span style="color:#666">(voor lokale bestanden)</span></label>
             <div class="api-key-row">
                 <input type="password" id="apiKey" class="api-key-input" placeholder="sk-...">
                 <button class="save-btn" id="saveApiKey">Opslaan</button>
@@ -587,7 +587,21 @@
                 <span>&#10003;</span> API key opgeslagen
             </div>
             <div class="api-key-hint">
-                Nog geen API key? <a href="https://platform.openai.com/api-keys" target="_blank">Maak er een aan bij OpenAI</a>
+                <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API keys</a>
+            </div>
+        </div>
+
+        <div class="api-key-section" id="assemblyKeySection">
+            <label for="assemblyKey">AssemblyAI API Key <span style="color:#666">(voor URLs - aanbevolen)</span></label>
+            <div class="api-key-row">
+                <input type="password" id="assemblyKey" class="api-key-input" placeholder="...">
+                <button class="save-btn" id="saveAssemblyKey">Opslaan</button>
+            </div>
+            <div class="api-key-status" id="assemblyKeyStatus">
+                <span>&#10003;</span> API key opgeslagen
+            </div>
+            <div class="api-key-hint">
+                <a href="https://www.assemblyai.com/app/account" target="_blank">AssemblyAI API keys</a> - leest audio direct van URL (geen download nodig!)
             </div>
         </div>
 
@@ -665,6 +679,7 @@
         // State
         const state = {
             apiKey: '',
+            assemblyKey: '',
             translateToNL: false,
             abortController: null,
             transcriptText: '',
@@ -676,6 +691,9 @@
         const apiKeySection = document.querySelector('.api-key-section');
         const apiKeyInput = document.getElementById('apiKey');
         const saveApiKeyBtn = document.getElementById('saveApiKey');
+        const assemblyKeySection = document.getElementById('assemblyKeySection');
+        const assemblyKeyInput = document.getElementById('assemblyKey');
+        const saveAssemblyKeyBtn = document.getElementById('saveAssemblyKey');
         const dropZone = document.getElementById('dropZone');
         const urlInput = document.getElementById('urlInput');
         const goBtn = document.getElementById('goBtn');
@@ -707,7 +725,7 @@
             checkUrlParam();
         };
 
-        // Load API key from localStorage
+        // Load API keys from localStorage
         const loadApiKey = () => {
             const savedKey = localStorage.getItem('transcriber_api_key');
             if (savedKey) {
@@ -715,9 +733,15 @@
                 apiKeyInput.value = savedKey;
                 apiKeySection.classList.add('has-key');
             }
+            const savedAssemblyKey = localStorage.getItem('transcriber_assembly_key');
+            if (savedAssemblyKey) {
+                state.assemblyKey = savedAssemblyKey;
+                assemblyKeyInput.value = savedAssemblyKey;
+                assemblyKeySection.classList.add('has-key');
+            }
         };
 
-        // Save API key to localStorage
+        // Save OpenAI API key to localStorage
         const saveApiKey = () => {
             const key = apiKeyInput.value.trim();
             if (key) {
@@ -733,22 +757,52 @@
             }
         };
 
+        // Save AssemblyAI API key to localStorage
+        const saveAssemblyKey = () => {
+            const key = assemblyKeyInput.value.trim();
+            if (key) {
+                state.assemblyKey = key;
+                localStorage.setItem('transcriber_assembly_key', key);
+                assemblyKeySection.classList.add('has-key');
+                saveAssemblyKeyBtn.textContent = 'Opgeslagen!';
+                saveAssemblyKeyBtn.classList.add('saved');
+                setTimeout(() => {
+                    saveAssemblyKeyBtn.textContent = 'Opslaan';
+                    saveAssemblyKeyBtn.classList.remove('saved');
+                }, 2000);
+            }
+        };
+
         // Setup event listeners
         const setupEventListeners = () => {
+            // OpenAI key
             saveApiKeyBtn.addEventListener('click', saveApiKey);
             apiKeyInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') saveApiKey();
             });
-            // Auto-save on paste into API key field
             apiKeyInput.addEventListener('paste', (e) => {
-                e.stopPropagation(); // Prevent global paste handler
-                setTimeout(saveApiKey, 50); // Wait for paste to complete
+                e.stopPropagation();
+                setTimeout(saveApiKey, 50);
             });
-            // Auto-save on input change (after typing stops)
             let saveTimeout;
             apiKeyInput.addEventListener('input', () => {
                 clearTimeout(saveTimeout);
                 saveTimeout = setTimeout(saveApiKey, 500);
+            });
+
+            // AssemblyAI key
+            saveAssemblyKeyBtn.addEventListener('click', saveAssemblyKey);
+            assemblyKeyInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') saveAssemblyKey();
+            });
+            assemblyKeyInput.addEventListener('paste', (e) => {
+                e.stopPropagation();
+                setTimeout(saveAssemblyKey, 50);
+            });
+            let saveAssemblyTimeout;
+            assemblyKeyInput.addEventListener('input', () => {
+                clearTimeout(saveAssemblyTimeout);
+                saveAssemblyTimeout = setTimeout(saveAssemblyKey, 500);
             });
 
             // URL input
@@ -917,9 +971,9 @@
                 return;
             }
 
-            // Check API key
-            if (!state.apiKey) {
-                showToast('Voer eerst je OpenAI API key in', true);
+            // Check API keys - need at least one
+            if (!state.apiKey && !state.assemblyKey) {
+                showToast('Voer eerst een API key in', true);
                 apiKeyInput.focus();
                 return;
             }
@@ -974,12 +1028,17 @@
                     }
                 }
 
-                // Download audio
-                updateStatus('Audio downloaden...', getFilename(audioUrl));
-                const audioBlob = await downloadAudio(audioUrl);
-
-                // Transcribe (handles chunking internally)
-                await transcribeAndProcess(audioBlob, getFilename(audioUrl));
+                // Use AssemblyAI if available (direct URL fetch - no download needed!)
+                if (state.assemblyKey) {
+                    updateStatus('Transcriberen via AssemblyAI...', 'Audio wordt direct van URL gelezen');
+                    statusText.textContent = `URL: ${audioUrl.substring(0, 60)}...`;
+                    await transcribeWithAssemblyAI(audioUrl);
+                } else {
+                    // Fall back to downloading + OpenAI Whisper
+                    updateStatus('Audio downloaden...', getFilename(audioUrl));
+                    const audioBlob = await downloadAudio(audioUrl);
+                    await transcribeAndProcess(audioBlob, getFilename(audioUrl));
+                }
 
             } catch (err) {
                 if (err.name === 'AbortError') {
@@ -1020,6 +1079,118 @@
             // Generate chapters
             updateStatus('Hoofdstukken detecteren...');
             state.chapters = await generateChapters(state.transcriptText);
+
+            // Show result
+            showResult();
+            hideStatus();
+        };
+
+        // Transcribe using AssemblyAI (fetches audio directly from URL)
+        const transcribeWithAssemblyAI = async (audioUrl) => {
+            const debugLog = (msg) => {
+                statusText.textContent = msg;
+                console.log(msg);
+            };
+
+            // Step 1: Submit transcription job
+            debugLog('Transcriptie job aanmaken...');
+            const submitResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+                method: 'POST',
+                headers: {
+                    'Authorization': state.assemblyKey,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    audio_url: audioUrl,
+                    language_detection: true
+                }),
+                signal: state.abortController?.signal
+            });
+
+            if (!submitResponse.ok) {
+                const err = await submitResponse.json().catch(() => ({}));
+                throw new Error(err.error || `AssemblyAI fout: ${submitResponse.status}`);
+            }
+
+            const { id } = await submitResponse.json();
+            debugLog(`Job gestart: ${id}`);
+
+            // Step 2: Poll for completion
+            let transcript = null;
+            let pollCount = 0;
+            const maxPolls = 300; // 5 minutes max (1 second intervals)
+
+            while (pollCount < maxPolls) {
+                await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds
+                pollCount++;
+
+                const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, {
+                    headers: { 'Authorization': state.assemblyKey },
+                    signal: state.abortController?.signal
+                });
+
+                if (!pollResponse.ok) {
+                    throw new Error(`Polling fout: ${pollResponse.status}`);
+                }
+
+                transcript = await pollResponse.json();
+                debugLog(`Status: ${transcript.status} (${pollCount * 2}s)`);
+
+                if (transcript.status === 'completed') {
+                    break;
+                } else if (transcript.status === 'error') {
+                    throw new Error(transcript.error || 'Transcriptie mislukt');
+                }
+                // 'queued' or 'processing' - continue polling
+            }
+
+            if (!transcript || transcript.status !== 'completed') {
+                throw new Error('Transcriptie timeout');
+            }
+
+            // Step 3: Process result
+            state.transcriptText = transcript.text || '';
+
+            // Convert words to segments (group by ~30 seconds)
+            if (transcript.words && transcript.words.length > 0) {
+                state.segments = [];
+                let currentSegment = { start: 0, text: '' };
+                let segmentStart = transcript.words[0].start / 1000;
+
+                for (const word of transcript.words) {
+                    const wordTime = word.start / 1000;
+                    if (wordTime - segmentStart > 30 && currentSegment.text) {
+                        currentSegment.start = segmentStart;
+                        state.segments.push(currentSegment);
+                        currentSegment = { start: 0, text: '' };
+                        segmentStart = wordTime;
+                    }
+                    currentSegment.text += (currentSegment.text ? ' ' : '') + word.text;
+                }
+                if (currentSegment.text) {
+                    currentSegment.start = segmentStart;
+                    state.segments.push(currentSegment);
+                }
+            } else {
+                state.segments = [{ start: 0, text: state.transcriptText }];
+            }
+
+            // Optionally translate
+            if (state.translateToNL && !isLikelyDutch(state.transcriptText)) {
+                if (state.apiKey) {
+                    updateStatus('Vertalen naar Nederlands...');
+                    state.transcriptText = await translateToNL(state.transcriptText);
+                    state.segments = [{ start: 0, text: state.transcriptText }];
+                }
+            }
+
+            // Generate chapters (needs OpenAI key)
+            if (state.apiKey) {
+                updateStatus('Hoofdstukken detecteren...');
+                state.chapters = await generateChapters(state.transcriptText);
+            } else {
+                state.chapters = [];
+            }
 
             // Show result
             showResult();
