@@ -1258,6 +1258,13 @@
                 processInput(url);
             } else if (text) {
                 processInput(text);
+            } else {
+                // Check for shared text from other tools (e.g., transcriber)
+                const sharedText = localStorage.getItem('speedreader_shared_text');
+                if (sharedText) {
+                    localStorage.removeItem('speedreader_shared_text');
+                    processInput(sharedText);
+                }
             }
         };
 

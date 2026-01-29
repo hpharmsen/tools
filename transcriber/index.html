@@ -1726,10 +1726,11 @@ Geen uitleg, alleen de JSON array.`
                 chaptersEl.classList.remove('show');
             }
 
-            // Update speedreader link
-            const speedreaderUrl = new URL('/speedreader/', window.location.origin);
-            speedreaderUrl.searchParams.set('text', state.transcriptText.substring(0, 10000));
-            speedreaderBtn.href = speedreaderUrl.toString();
+            // Update speedreader link - store text in localStorage to avoid URL length limits
+            speedreaderBtn.href = '/speedreader/';
+            speedreaderBtn.onclick = (e) => {
+                localStorage.setItem('speedreader_shared_text', state.transcriptText);
+            };
 
             outputEl.classList.add('show');
         };
