@@ -1179,14 +1179,18 @@
 
             // Optionally translate (use detected language, not word matching)
             const isAlreadyDutch = detectedLanguage === 'nl';
+            debugLog(`Vertalen: toggle=${state.translateToNL}, taal=${detectedLanguage}, OpenAI key=${state.apiKey ? 'ja' : 'NEE'}`);
+
             if (state.translateToNL && !isAlreadyDutch) {
                 if (state.apiKey) {
                     debugLog(`Vertalen van ${detectedLanguage} naar Nederlands...`);
                     updateStatus('Vertalen naar Nederlands...', `Brontaal: ${detectedLanguage}`);
                     state.transcriptText = await translateToNL(state.transcriptText);
                     state.segments = [{ start: 0, text: state.transcriptText }];
+                    debugLog('Vertaling voltooid');
                 } else {
-                    debugLog('Vertaling overgeslagen: geen OpenAI key');
+                    debugLog('FOUT: Vertaling vereist OpenAI API key!');
+                    showToast('Vertaling vereist OpenAI API key', true);
                 }
             }
 
