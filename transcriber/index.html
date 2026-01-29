@@ -93,6 +93,27 @@
             background: #ff6b6b;
         }
 
+        .save-btn.saved {
+            background: #2ecc71;
+        }
+
+        .api-key-section.has-key {
+            border: 1px solid rgba(46, 204, 113, 0.3);
+        }
+
+        .api-key-status {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: #2ecc71;
+        }
+
+        .api-key-section.has-key .api-key-status {
+            display: flex;
+        }
+
         .api-key-hint {
             margin-top: 8px;
             font-size: 0.8rem;
@@ -336,7 +357,81 @@
             line-height: 1.7;
             font-size: 0.95rem;
             color: #ddd;
-            white-space: pre-wrap;
+        }
+
+        /* Chapters */
+        .chapters {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .chapters.show {
+            display: block;
+        }
+
+        .chapters-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .chapter-item {
+            display: flex;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+        }
+
+        .chapter-item:last-child {
+            border-bottom: none;
+        }
+
+        .chapter-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            margin: 0 -15px;
+            padding: 8px 15px;
+        }
+
+        .chapter-time {
+            color: #e94560;
+            font-family: monospace;
+            font-size: 0.85rem;
+            min-width: 50px;
+        }
+
+        .chapter-name {
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        /* Transcript segments with timestamps */
+        .segment {
+            margin-bottom: 12px;
+        }
+
+        .segment-time {
+            color: #e94560;
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .segment-time:hover {
+            text-decoration: underline;
+        }
+
+        .segment-text {
+            color: #ddd;
+        }
+
+        /* File input */
+        .file-input {
+            display: none;
         }
 
         /* Episode info */
@@ -430,6 +525,9 @@
                 <input type="password" id="apiKey" class="api-key-input" placeholder="sk-...">
                 <button class="save-btn" id="saveApiKey">Opslaan</button>
             </div>
+            <div class="api-key-status" id="apiKeyStatus">
+                <span>&#10003;</span> API key opgeslagen
+            </div>
             <div class="api-key-hint">
                 Nog geen API key? <a href="https://platform.openai.com/api-keys" target="_blank">Maak er een aan bij OpenAI</a>
             </div>
@@ -437,10 +535,11 @@
 
         <!-- Drop Zone -->
         <div class="drop-zone" id="dropZone">
-            <div class="drop-zone-icon">🔗</div>
-            <div class="drop-zone-text">Plak of drop een podcast URL hier</div>
-            <div class="drop-zone-hint">Ondersteunt: MP3 links, RSS feeds (pakt nieuwste aflevering)</div>
+            <div class="drop-zone-icon">🎧</div>
+            <div class="drop-zone-text">Drop audio bestand of URL hier</div>
+            <div class="drop-zone-hint">Ondersteunt: MP3/M4A/WAV bestanden, podcast URLs, RSS feeds</div>
         </div>
+        <input type="file" class="file-input" id="fileInput" accept="audio/*">
 
         <!-- Options -->
         <div class="options">
@@ -477,8 +576,13 @@
                 <div class="output-title">Transcriptie</div>
                 <div class="output-actions">
                     <button class="action-btn" id="copyBtn">📋 Kopieer</button>
+                    <button class="action-btn" id="downloadBtn">💾 Download</button>
                     <a class="action-btn primary" id="speedreaderBtn" href="#" target="_blank">⚡ Open in Speedreader</a>
                 </div>
+            </div>
+            <div class="chapters" id="chapters">
+                <div class="chapters-title">Hoofdstukken</div>
+                <div id="chapterList"></div>
             </div>
             <div class="transcript-box" id="transcript"></div>
         </div>
@@ -488,18 +592,26 @@
     <div class="toast" id="toast"></div>
 
     <script>
+        // Constants
+        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+        const MAX_CHUNK_SIZE = 24 * 1024 * 1024; // 24MB to be safe (Whisper limit is 25MB)
+
         // State
         const state = {
             apiKey: '',
             translateToNL: false,
             abortController: null,
-            transcriptText: ''
+            transcriptText: '',
+            segments: [], // Transcript segments with timestamps
+            chapters: []
         };
 
         // DOM elements
+        const apiKeySection = document.querySelector('.api-key-section');
         const apiKeyInput = document.getElementById('apiKey');
         const saveApiKeyBtn = document.getElementById('saveApiKey');
         const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
         const translateToggle = document.getElementById('translateToggle');
         const statusEl = document.getElementById('status');
         const statusTitle = document.getElementById('statusTitle');
@@ -509,15 +621,15 @@
         const cancelBtn = document.getElementById('cancelBtn');
         const outputEl = document.getElementById('output');
         const transcriptEl = document.getElementById('transcript');
+        const chaptersEl = document.getElementById('chapters');
+        const chapterListEl = document.getElementById('chapterList');
         const copyBtn = document.getElementById('copyBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
         const speedreaderBtn = document.getElementById('speedreaderBtn');
         const episodeInfo = document.getElementById('episodeInfo');
         const episodeTitle = document.getElementById('episodeTitle');
         const episodeMeta = document.getElementById('episodeMeta');
         const toast = document.getElementById('toast');
-
-        // CORS proxy
-        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
         // Initialize
         const init = () => {
@@ -532,6 +644,7 @@
             if (savedKey) {
                 state.apiKey = savedKey;
                 apiKeyInput.value = savedKey;
+                apiKeySection.classList.add('has-key');
             }
         };
 
@@ -541,7 +654,13 @@
             if (key) {
                 state.apiKey = key;
                 localStorage.setItem('transcriber_api_key', key);
-                showToast('API key opgeslagen');
+                apiKeySection.classList.add('has-key');
+                saveApiKeyBtn.textContent = 'Opgeslagen!';
+                saveApiKeyBtn.classList.add('saved');
+                setTimeout(() => {
+                    saveApiKeyBtn.textContent = 'Opslaan';
+                    saveApiKeyBtn.classList.remove('saved');
+                }, 2000);
             }
         };
 
@@ -551,12 +670,26 @@
             apiKeyInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') saveApiKey();
             });
+            // Auto-save on paste into API key field
+            apiKeyInput.addEventListener('paste', (e) => {
+                e.stopPropagation(); // Prevent global paste handler
+                setTimeout(saveApiKey, 50); // Wait for paste to complete
+            });
+            // Auto-save on input change (after typing stops)
+            let saveTimeout;
+            apiKeyInput.addEventListener('input', () => {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(saveApiKey, 500);
+            });
 
             // Drop zone
             dropZone.addEventListener('click', handleDropZoneClick);
             dropZone.addEventListener('dragover', handleDragOver);
             dropZone.addEventListener('dragleave', handleDragLeave);
             dropZone.addEventListener('drop', handleDrop);
+
+            // File input
+            fileInput.addEventListener('change', handleFileSelect);
 
             // Global paste
             document.addEventListener('paste', handlePaste);
@@ -572,20 +705,34 @@
 
             // Copy button
             copyBtn.addEventListener('click', copyTranscript);
+
+            // Download button
+            downloadBtn.addEventListener('click', downloadTranscript);
         };
 
         // Handle drop zone click
         const handleDropZoneClick = async () => {
+            // Try clipboard first, fall back to file picker
             try {
                 const text = await navigator.clipboard.readText();
-                if (text.trim()) {
+                if (text.trim() && isValidUrl(text.trim())) {
                     processUrl(text.trim());
-                } else {
-                    showToast('Klembord is leeg', true);
+                    return;
                 }
             } catch (err) {
-                showToast('Kan klembord niet lezen. Plak met Ctrl+V', true);
+                // Clipboard not available
             }
+            // Open file picker
+            fileInput.click();
+        };
+
+        // Handle file selection
+        const handleFileSelect = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                processAudioFile(file);
+            }
+            fileInput.value = ''; // Reset for next selection
         };
 
         // Handle drag over
@@ -603,6 +750,17 @@
         const handleDrop = (e) => {
             e.preventDefault();
             dropZone.classList.remove('drag-over');
+
+            // Check for audio files first
+            if (e.dataTransfer.files.length > 0) {
+                const file = e.dataTransfer.files[0];
+                if (file.type.startsWith('audio/') || /\.(mp3|m4a|wav|ogg|flac|webm)$/i.test(file.name)) {
+                    processAudioFile(file);
+                    return;
+                }
+            }
+
+            // Otherwise check for URL
             const text = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list');
             if (text) {
                 processUrl(text.trim());
@@ -611,6 +769,9 @@
 
         // Handle paste
         const handlePaste = (e) => {
+            // Ignore if pasting into API key input
+            if (e.target === apiKeyInput) return;
+
             const text = e.clipboardData.getData('text/plain');
             if (text && text.trim()) {
                 e.preventDefault();
@@ -624,6 +785,42 @@
             const url = params.get('url');
             if (url) {
                 processUrl(url);
+            }
+        };
+
+        // Process local audio file
+        const processAudioFile = async (file) => {
+            // Check API key
+            if (!state.apiKey) {
+                showToast('Voer eerst je OpenAI API key in', true);
+                apiKeyInput.focus();
+                return;
+            }
+
+            // Reset output
+            outputEl.classList.remove('show');
+            episodeInfo.classList.remove('show');
+            chaptersEl.classList.remove('show');
+
+            try {
+                state.abortController = new AbortController();
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+                showStatus('Audio voorbereiden...', `${file.name} (${fileSizeMB} MB)`, 'indeterminate');
+
+                // Convert to blob if needed
+                const audioBlob = file;
+
+                // Transcribe (handles chunking internally)
+                await transcribeAndProcess(audioBlob, file.name);
+
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    showToast('Geannuleerd');
+                } else {
+                    console.error('Error:', err);
+                    showToast(err.message || 'Er ging iets mis', true);
+                }
+                hideStatus();
             }
         };
 
@@ -645,6 +842,7 @@
             // Reset output
             outputEl.classList.remove('show');
             episodeInfo.classList.remove('show');
+            chaptersEl.classList.remove('show');
 
             try {
                 state.abortController = new AbortController();
@@ -678,21 +876,8 @@
                 updateStatus('Audio downloaden...', getFilename(audioUrl));
                 const audioBlob = await downloadAudio(audioUrl);
 
-                // Transcribe
-                updateStatus('Transcriberen...', 'Dit kan even duren');
-                setProgress(0);
-                const transcript = await transcribeAudio(audioBlob);
-
-                // Optionally translate
-                let finalText = transcript;
-                if (state.translateToNL && !isLikelyDutch(transcript)) {
-                    updateStatus('Vertalen naar Nederlands...');
-                    finalText = await translateToNL(transcript);
-                }
-
-                // Show result
-                showResult(finalText);
-                hideStatus();
+                // Transcribe (handles chunking internally)
+                await transcribeAndProcess(audioBlob, getFilename(audioUrl));
 
             } catch (err) {
                 if (err.name === 'AbortError') {
@@ -703,6 +888,40 @@
                 }
                 hideStatus();
             }
+        };
+
+        // Main transcription and processing flow
+        const transcribeAndProcess = async (audioBlob, filename) => {
+            const fileSizeMB = (audioBlob.size / (1024 * 1024)).toFixed(1);
+
+            // Check if we need to chunk
+            if (audioBlob.size > MAX_CHUNK_SIZE) {
+                updateStatus('Transcriberen...', `Groot bestand (${fileSizeMB} MB) - wordt in delen verwerkt`);
+                state.segments = await transcribeInChunks(audioBlob);
+            } else {
+                updateStatus('Transcriberen...', `${fileSizeMB} MB`);
+                setProgress(0);
+                state.segments = await transcribeAudio(audioBlob);
+            }
+
+            // Build plain text from segments
+            state.transcriptText = state.segments.map(s => s.text).join(' ');
+
+            // Optionally translate
+            if (state.translateToNL && !isLikelyDutch(state.transcriptText)) {
+                updateStatus('Vertalen naar Nederlands...');
+                state.transcriptText = await translateToNL(state.transcriptText);
+                // Clear timestamps when translating (they won't match)
+                state.segments = [{ start: 0, text: state.transcriptText }];
+            }
+
+            // Generate chapters
+            updateStatus('Hoofdstukken detecteren...');
+            state.chapters = await generateChapters(state.transcriptText);
+
+            // Show result
+            showResult();
+            hideStatus();
         };
 
         // Validate URL
@@ -845,12 +1064,12 @@
             return await response.blob();
         };
 
-        // Transcribe audio using OpenAI Whisper
-        const transcribeAudio = async (audioBlob) => {
+        // Transcribe audio using OpenAI Whisper (returns segments with timestamps)
+        const transcribeAudio = async (audioBlob, timeOffset = 0) => {
             const formData = new FormData();
             formData.append('file', audioBlob, 'audio.mp3');
             formData.append('model', 'whisper-1');
-            formData.append('response_format', 'text');
+            formData.append('response_format', 'verbose_json');
 
             const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
                 method: 'POST',
@@ -869,7 +1088,96 @@
                 throw new Error(error.error?.message || 'Transcriptie mislukt');
             }
 
-            return await response.text();
+            const data = await response.json();
+
+            // Convert to our segment format with time offset applied
+            return (data.segments || []).map(seg => ({
+                start: seg.start + timeOffset,
+                end: seg.end + timeOffset,
+                text: seg.text.trim()
+            }));
+        };
+
+        // Transcribe large audio in chunks
+        const transcribeInChunks = async (audioBlob) => {
+            // For simplicity, we'll split by size
+            // In a real implementation, you'd want to split at silence points
+            const chunks = [];
+            const chunkSize = MAX_CHUNK_SIZE;
+            let offset = 0;
+
+            while (offset < audioBlob.size) {
+                const chunk = audioBlob.slice(offset, offset + chunkSize);
+                chunks.push(chunk);
+                offset += chunkSize;
+            }
+
+            const allSegments = [];
+            let timeOffset = 0;
+
+            for (let i = 0; i < chunks.length; i++) {
+                const progress = Math.round(((i + 1) / chunks.length) * 100);
+                updateStatus(`Transcriberen...`, `Deel ${i + 1} van ${chunks.length}`);
+                setProgress(progress);
+
+                const chunkSegments = await transcribeAudio(chunks[i], timeOffset);
+                allSegments.push(...chunkSegments);
+
+                // Estimate time offset for next chunk based on last segment
+                if (chunkSegments.length > 0) {
+                    timeOffset = chunkSegments[chunkSegments.length - 1].end;
+                }
+            }
+
+            return allSegments;
+        };
+
+        // Generate chapters using GPT
+        const generateChapters = async (text) => {
+            // Skip for very short transcripts
+            if (text.length < 500) return [];
+
+            try {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${state.apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o-mini',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: `Analyseer deze podcast transcriptie en identificeer 3-7 hoofdstukken/onderwerpen.
+Geef voor elk hoofdstuk een korte titel (max 5 woorden).
+Antwoord ALLEEN in JSON formaat: [{"title": "Titel hier"}, ...]
+Geen uitleg, alleen de JSON array.`
+                            },
+                            {
+                                role: 'user',
+                                content: text.substring(0, 8000) // Limit input
+                            }
+                        ],
+                        temperature: 0.3
+                    }),
+                    signal: state.abortController?.signal
+                });
+
+                if (!response.ok) return [];
+
+                const data = await response.json();
+                const content = data.choices[0]?.message?.content || '[]';
+
+                // Parse JSON from response
+                const jsonMatch = content.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    return JSON.parse(jsonMatch[0]);
+                }
+            } catch (e) {
+                console.error('Chapter generation failed:', e);
+            }
+            return [];
         };
 
         // Translate to Dutch using OpenAI
@@ -951,17 +1259,101 @@
             }
         };
 
+        // Format time as MM:SS
+        const formatTime = (seconds) => {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        };
+
         // Show result
-        const showResult = (text) => {
-            state.transcriptText = text;
-            transcriptEl.textContent = text;
+        const showResult = () => {
+            // Display transcript with timestamps
+            if (state.segments.length > 0 && state.segments[0].start !== undefined) {
+                // Group segments into paragraphs (every ~30 seconds or by sentence)
+                let html = '';
+                let currentParagraph = [];
+                let paragraphStart = 0;
+
+                for (const seg of state.segments) {
+                    if (currentParagraph.length === 0) {
+                        paragraphStart = seg.start;
+                    }
+                    currentParagraph.push(seg.text);
+
+                    // Start new paragraph after ~30 seconds or sentence-ending punctuation
+                    const timeDiff = seg.end - paragraphStart;
+                    const endsWithSentence = /[.!?]$/.test(seg.text);
+
+                    if (timeDiff > 30 && endsWithSentence) {
+                        html += `<div class="segment">
+                            <span class="segment-time">${formatTime(paragraphStart)}</span>
+                            <span class="segment-text">${currentParagraph.join(' ')}</span>
+                        </div>`;
+                        currentParagraph = [];
+                    }
+                }
+
+                // Add remaining text
+                if (currentParagraph.length > 0) {
+                    html += `<div class="segment">
+                        <span class="segment-time">${formatTime(paragraphStart)}</span>
+                        <span class="segment-text">${currentParagraph.join(' ')}</span>
+                    </div>`;
+                }
+
+                transcriptEl.innerHTML = html;
+            } else {
+                // Plain text without timestamps
+                transcriptEl.textContent = state.transcriptText;
+            }
+
+            // Display chapters
+            if (state.chapters.length > 0) {
+                chapterListEl.innerHTML = state.chapters.map((ch, i) => `
+                    <div class="chapter-item">
+                        <span class="chapter-time">${i + 1}.</span>
+                        <span class="chapter-name">${ch.title}</span>
+                    </div>
+                `).join('');
+                chaptersEl.classList.add('show');
+            } else {
+                chaptersEl.classList.remove('show');
+            }
 
             // Update speedreader link
             const speedreaderUrl = new URL('/speedreader/', window.location.origin);
-            speedreaderUrl.searchParams.set('text', text.substring(0, 10000)); // Limit for URL length
+            speedreaderUrl.searchParams.set('text', state.transcriptText.substring(0, 10000));
             speedreaderBtn.href = speedreaderUrl.toString();
 
             outputEl.classList.add('show');
+        };
+
+        // Download transcript as text file
+        const downloadTranscript = () => {
+            // Build content with timestamps
+            let content = '';
+            if (state.chapters.length > 0) {
+                content += 'HOOFDSTUKKEN\n';
+                content += state.chapters.map((ch, i) => `${i + 1}. ${ch.title}`).join('\n');
+                content += '\n\n---\n\n';
+            }
+
+            if (state.segments.length > 0 && state.segments[0].start !== undefined) {
+                for (const seg of state.segments) {
+                    content += `[${formatTime(seg.start)}] ${seg.text}\n`;
+                }
+            } else {
+                content = state.transcriptText;
+            }
+
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'transcriptie.txt';
+            a.click();
+            URL.revokeObjectURL(url);
         };
 
         // Copy transcript
