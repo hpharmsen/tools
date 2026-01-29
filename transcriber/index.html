@@ -434,6 +434,22 @@
             display: none;
         }
 
+        .file-select-btn {
+            margin-top: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #aaa;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .file-select-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
         /* Episode info */
         .episode-info {
             background: rgba(233, 69, 96, 0.1);
@@ -536,8 +552,9 @@
         <!-- Drop Zone -->
         <div class="drop-zone" id="dropZone">
             <div class="drop-zone-icon">🎧</div>
-            <div class="drop-zone-text">Drop audio bestand of URL hier</div>
+            <div class="drop-zone-text">Plak URL (Ctrl+V) of drop bestand hier</div>
             <div class="drop-zone-hint">Ondersteunt: MP3/M4A/WAV bestanden, podcast URLs, RSS feeds</div>
+            <button class="file-select-btn" id="fileSelectBtn">Of kies bestand...</button>
         </div>
         <input type="file" class="file-input" id="fileInput" accept="audio/*">
 
@@ -612,6 +629,7 @@
         const saveApiKeyBtn = document.getElementById('saveApiKey');
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
+        const fileSelectBtn = document.getElementById('fileSelectBtn');
         const translateToggle = document.getElementById('translateToggle');
         const statusEl = document.getElementById('status');
         const statusTitle = document.getElementById('statusTitle');
@@ -682,11 +700,16 @@
                 saveTimeout = setTimeout(saveApiKey, 500);
             });
 
-            // Drop zone
-            dropZone.addEventListener('click', handleDropZoneClick);
+            // Drop zone (drag/drop only, no click)
             dropZone.addEventListener('dragover', handleDragOver);
             dropZone.addEventListener('dragleave', handleDragLeave);
             dropZone.addEventListener('drop', handleDrop);
+
+            // File select button
+            fileSelectBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fileInput.click();
+            });
 
             // File input
             fileInput.addEventListener('change', handleFileSelect);
@@ -708,27 +731,6 @@
 
             // Download button
             downloadBtn.addEventListener('click', downloadTranscript);
-        };
-
-        // Handle drop zone click
-        const handleDropZoneClick = async () => {
-            // Try clipboard first, fall back to file picker
-            try {
-                const text = await navigator.clipboard.readText();
-                if (text && text.trim()) {
-                    const input = text.trim();
-                    if (isValidUrl(input)) {
-                        processUrl(input);
-                        return;
-                    } else {
-                        showToast('Klembord bevat geen geldige URL. Kies een bestand.', true);
-                    }
-                }
-            } catch (err) {
-                // Clipboard not available or permission denied
-            }
-            // Open file picker
-            fileInput.click();
         };
 
         // Handle file selection
