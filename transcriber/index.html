@@ -1150,6 +1150,8 @@
 
             // Step 3: Process result
             state.transcriptText = transcript.text || '';
+            const detectedLanguage = transcript.language_code || 'unknown';
+            debugLog(`Taal gedetecteerd: ${detectedLanguage}`);
 
             // Convert words to segments (group by ~30 seconds)
             if (transcript.words && transcript.words.length > 0) {
@@ -1175,12 +1177,16 @@
                 state.segments = [{ start: 0, text: state.transcriptText }];
             }
 
-            // Optionally translate
-            if (state.translateToNL && !isLikelyDutch(state.transcriptText)) {
+            // Optionally translate (use detected language, not word matching)
+            const isAlreadyDutch = detectedLanguage === 'nl';
+            if (state.translateToNL && !isAlreadyDutch) {
                 if (state.apiKey) {
-                    updateStatus('Vertalen naar Nederlands...');
+                    debugLog(`Vertalen van ${detectedLanguage} naar Nederlands...`);
+                    updateStatus('Vertalen naar Nederlands...', `Brontaal: ${detectedLanguage}`);
                     state.transcriptText = await translateToNL(state.transcriptText);
                     state.segments = [{ start: 0, text: state.transcriptText }];
+                } else {
+                    debugLog('Vertaling overgeslagen: geen OpenAI key');
                 }
             }
 
