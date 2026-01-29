@@ -715,12 +715,17 @@
             // Try clipboard first, fall back to file picker
             try {
                 const text = await navigator.clipboard.readText();
-                if (text.trim() && isValidUrl(text.trim())) {
-                    processUrl(text.trim());
-                    return;
+                if (text && text.trim()) {
+                    const input = text.trim();
+                    if (isValidUrl(input)) {
+                        processUrl(input);
+                        return;
+                    } else {
+                        showToast('Klembord bevat geen geldige URL. Kies een bestand.', true);
+                    }
                 }
             } catch (err) {
-                // Clipboard not available
+                // Clipboard not available or permission denied
             }
             // Open file picker
             fileInput.click();
@@ -775,7 +780,15 @@
             const text = e.clipboardData.getData('text/plain');
             if (text && text.trim()) {
                 e.preventDefault();
-                processUrl(text.trim());
+                const input = text.trim();
+                // Check if it's a URL or audio file path
+                if (isValidUrl(input)) {
+                    processUrl(input);
+                } else {
+                    showToast('Plak een geldige URL (podcast of RSS feed)', true);
+                }
+            } else {
+                showToast('Klembord is leeg of bevat geen tekst', true);
             }
         };
 
