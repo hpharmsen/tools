@@ -1599,10 +1599,23 @@ Geen uitleg, alleen de JSON array.`
 
         // Simple check if text is likely Dutch
         const isLikelyDutch = (text) => {
-            const dutchWords = ['de', 'het', 'een', 'van', 'en', 'in', 'dat', 'op', 'te', 'voor', 'met', 'zijn', 'er', 'aan', 'om', 'ook', 'als', 'maar', 'bij', 'dan', 'nog', 'wel', 'geen', 'meer', 'al', 'nu'];
-            const words = text.toLowerCase().split(/\s+/).slice(0, 200);
-            const matches = words.filter(w => dutchWords.includes(w)).length;
-            return matches / words.length > 0.1;
+            const words = text.toLowerCase().split(/\s+/).slice(0, 300);
+
+            // Uniquely Dutch words (not common in Spanish/English)
+            const dutchOnlyWords = ['het', 'een', 'van', 'dat', 'voor', 'met', 'zijn', 'naar', 'ook', 'maar', 'bij', 'nog', 'wel', 'geen', 'meer', 'deze', 'wordt', 'werd', 'hebben', 'heeft', 'kunnen', 'zou', 'zal', 'moet', 'waar', 'daar', 'hier', 'veel', 'omdat', 'volgens', 'tijdens', 'tussen', 'zonder', 'binnen', 'buiten', 'eigenlijk', 'natuurlijk', 'gewoon', 'echt', 'heel', 'vaak', 'altijd', 'nooit', 'soms', 'misschien', 'waarom', 'hoe', 'wat', 'wie', 'welke', 'welk', 'ik', 'je', 'jij', 'hij', 'zij', 'wij', 'jullie', 'hun', 'ons', 'mijn', 'jouw', 'zijn', 'haar', 'onze'];
+            const dutchMatches = words.filter(w => dutchOnlyWords.includes(w)).length;
+
+            // Spanish indicators
+            const spanishWords = ['que', 'los', 'las', 'del', 'una', 'uno', 'por', 'con', 'para', 'como', 'pero', 'más', 'este', 'esta', 'esto', 'ese', 'esa', 'eso', 'muy', 'puede', 'cuando', 'sobre', 'todo', 'también', 'fue', 'ser', 'tiene', 'había', 'están', 'estoy', 'porque', 'donde', 'ahora', 'entonces', 'siempre', 'nunca', 'algo', 'nada', 'quien', 'cual', 'yo', 'tu', 'él', 'ella', 'nosotros', 'ellos'];
+            const spanishMatches = words.filter(w => spanishWords.includes(w)).length;
+
+            // English indicators
+            const englishWords = ['the', 'and', 'that', 'for', 'are', 'with', 'this', 'from', 'have', 'was', 'were', 'been', 'being', 'would', 'could', 'should', 'will', 'just', 'about', 'into', 'your', 'what', 'when', 'which', 'their', 'there', 'these', 'those', 'through', 'because', 'where', 'after', 'before', 'between', 'under', 'again', 'further', 'then', 'once', 'here', 'why', 'how', 'each', 'she', 'him', 'her', 'they', 'them'];
+            const englishMatches = words.filter(w => englishWords.includes(w)).length;
+
+            // It's Dutch if Dutch matches are significant AND more than Spanish/English
+            const dutchRatio = dutchMatches / words.length;
+            return dutchRatio > 0.05 && dutchMatches > spanishMatches && dutchMatches > englishMatches;
         };
 
         // Show status
