@@ -954,9 +954,11 @@
                         showEpisodeInfo(episodeData);
                     } else if (content.includes('<html') || content.includes('<!DOCTYPE')) {
                         // It's an HTML page - try to extract audio URL
+                        updateStatus('HTML pagina gevonden, zoeken naar audio...');
                         const extracted = extractAudioFromHtml(content, url);
                         if (extracted) {
                             audioUrl = extracted.audioUrl;
+                            statusText.textContent = `Gevonden: ${audioUrl.substring(0, 60)}...`;
                             if (extracted.title) {
                                 showEpisodeInfo({ title: extracted.title, pubDate: '' });
                             }
@@ -1222,42 +1224,56 @@
 
         // Download audio file
         const downloadAudio = async (url) => {
-            console.log('Downloading audio from:', url);
+            const debugLog = (msg) => {
+                statusText.textContent = msg;
+                console.log(msg);
+            };
+
+            debugLog(`Audio URL: ${url.substring(0, 80)}...`);
 
             // Try direct fetch first
             try {
+                debugLog('Poging 1: Direct fetch...');
                 const response = await fetch(url, {
                     signal: state.abortController?.signal
                 });
+                debugLog(`Direct: status ${response.status}`);
                 if (response.ok) {
-                    console.log('Direct fetch succeeded');
-                    return await response.blob();
+                    const blob = await response.blob();
+                    debugLog(`Direct OK: ${(blob.size / 1024).toFixed(0)} KB`);
+                    if (blob.size > 1000) {
+                        return blob;
+                    }
+                    debugLog(`Direct: te klein (${blob.size} bytes)`);
                 }
             } catch (e) {
-                console.log('Direct fetch failed:', e.message);
+                debugLog(`Direct mislukt: ${e.message}`);
             }
 
             // Try CORS proxies
-            for (const proxy of CORS_PROXIES) {
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                const proxy = CORS_PROXIES[i];
                 try {
-                    console.log('Trying proxy:', proxy);
+                    debugLog(`Poging ${i + 2}: Proxy ${i + 1}...`);
                     const proxyUrl = proxy + encodeURIComponent(url);
                     const response = await fetch(proxyUrl, {
                         signal: state.abortController?.signal
                     });
+                    debugLog(`Proxy ${i + 1}: status ${response.status}`);
                     if (response.ok) {
                         const blob = await response.blob();
-                        if (blob.size > 1000) { // Make sure we got actual content
-                            console.log('Proxy succeeded:', proxy);
+                        debugLog(`Proxy ${i + 1}: ${(blob.size / 1024).toFixed(0)} KB`);
+                        if (blob.size > 1000) {
                             return blob;
                         }
+                        debugLog(`Proxy ${i + 1}: te klein (${blob.size} bytes)`);
                     }
                 } catch (e) {
-                    console.log('Proxy failed:', proxy, e.message);
+                    debugLog(`Proxy ${i + 1} mislukt: ${e.message}`);
                 }
             }
 
-            throw new Error(`Kon audio niet downloaden: ${url}`);
+            throw new Error(`Download mislukt. URL: ${url.substring(0, 60)}...`);
         };
 
         // Transcribe audio using OpenAI Whisper (returns segments with timestamps)
