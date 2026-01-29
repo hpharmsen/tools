@@ -580,7 +580,7 @@
         <div class="api-key-section">
             <label for="apiKey">OpenAI API Key <span style="color:#666">(voor lokale bestanden)</span></label>
             <div class="api-key-row">
-                <input type="password" id="apiKey" class="api-key-input" placeholder="sk-...">
+                <input type="text" id="apiKey" class="api-key-input" placeholder="sk-...">
                 <button class="save-btn" id="saveApiKey">Opslaan</button>
             </div>
             <div class="api-key-status" id="apiKeyStatus">
@@ -594,7 +594,7 @@
         <div class="api-key-section" id="assemblyKeySection">
             <label for="assemblyKey">AssemblyAI API Key <span style="color:#666">(voor URLs - aanbevolen)</span></label>
             <div class="api-key-row">
-                <input type="password" id="assemblyKey" class="api-key-input" placeholder="...">
+                <input type="text" id="assemblyKey" class="api-key-input" placeholder="...">
                 <button class="save-btn" id="saveAssemblyKey">Opslaan</button>
             </div>
             <div class="api-key-status" id="assemblyKeyStatus">
@@ -854,7 +854,6 @@
             if (url) {
                 if (isValidUrl(url)) {
                     processUrl(url);
-                    urlInput.value = '';
                 } else {
                     showToast('Voer een geldige URL in', true);
                 }
