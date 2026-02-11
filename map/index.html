@@ -12,7 +12,7 @@
         body { font-family: 'Segoe UI', Arial, sans-serif; height: 100vh; display: flex; background: #f5f5f5; }
 
         .chat-panel { width: 55%; display: flex; flex-direction: column; height: 100vh; }
-        .map-panel { width: 45%; height: 100vh; }
+        .map-panel { width: 45%; height: 100vh; position: relative; }
 
         .header { background: #2c3e50; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
         .header h1 { font-size: 1.3em; font-weight: 700; }
@@ -63,6 +63,11 @@
         .modal .error { color: #c00; font-size: 13px; margin-bottom: 8px; display: none; }
 
         #map { width: 100%; height: 100%; }
+
+        .map-loading { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: white; padding: 10px 20px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 1000; display: none; font-size: 13px; color: #555; }
+        .map-loading .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #4a90d9; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         .legend { background: white; padding: 10px 14px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); line-height: 1.8; font-size: 13px; }
         .legend-item { display: flex; align-items: center; gap: 6px; }
         .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
@@ -96,6 +101,10 @@
     </div>
     <div class="map-panel">
         <div id="map"></div>
+        <div class="map-loading" id="map-loading">
+            <span class="spinner"></span>
+            <span id="map-loading-text">Locaties opzoeken...</span>
+        </div>
     </div>
 
     <div class="modal-overlay" id="api-modal" style="display:none;">
@@ -110,35 +119,35 @@
 
     <script>
         const MODEL = 'gemini-2.5-flash';
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+        const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';
+        const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 
-        const SYSTEM_PROMPT = `Je bent City Explorer, een Nederlandstalige stadsgids gericht op stellen tussen 30 en 70 jaar. Je bent gespecialiseerd in het verkennen van stedelijke hoogtepunten en architectuur, met een extra focus op plekken waar je lekker kunt eten.
-
-Je stijl:
-- Vriendelijk en enthousiast
-- Je geeft top 10 lijsten van bezienswaardigheden als iemand een stad noemt
-- Extra aandacht voor restaurants en culinaire ervaringen
-- Informatie is gericht op stellen in de leeftijdsgroep 30-70
-- Je vraagt om verduidelijking bij onduidelijke verzoeken
-- Je antwoordt altijd in het Nederlands
-
-BELANGRIJK TECHNISCH VEREISTE:
-Voeg aan het EINDE van elk antwoord een JSON-blok toe met alle genoemde locaties en hun exacte GPS-coördinaten. Gebruik PRECIES dit formaat:
-
-[LOCATIONS]
-[{"name": "Naam", "category": "Categorie", "lat": 12.3456, "lon": 78.9012}]
-[/LOCATIONS]
-
-Mogelijke categorieën: Bezienswaardigheid, Restaurant, Museum, Park, Boulevard, Markt, Kerk, Hotel, Café, Overig
-
-CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
-- Latitude en longitude niet verwisseld zijn
-- De locaties op het land vallen, niet in zee
-- De coördinaten verwijzen naar het exacte adres van de locatie`;
+        const SYSTEM_PROMPT = 'Je bent City Explorer, een Nederlandstalige stadsgids gericht op stellen tussen 30 en 70 jaar. Je bent gespecialiseerd in het verkennen van stedelijke hoogtepunten en architectuur, met een extra focus op plekken waar je lekker kunt eten.\n\n' +
+            'Je stijl:\n' +
+            '- Vriendelijk en enthousiast\n' +
+            '- Je geeft top 10 lijsten van bezienswaardigheden als iemand een stad noemt\n' +
+            '- Extra aandacht voor restaurants en culinaire ervaringen\n' +
+            '- Informatie is gericht op stellen in de leeftijdsgroep 30-70\n' +
+            '- Je vraagt om verduidelijking bij onduidelijke verzoeken\n' +
+            '- Je antwoordt altijd in het Nederlands\n\n' +
+            'BELANGRIJK TECHNISCH VEREISTE:\n' +
+            'Voeg aan het EINDE van elk antwoord een JSON-blok toe met de genoemde locaties. Gebruik PRECIES dit formaat:\n\n' +
+            '[LOCATIONS]\n' +
+            '{"city": "City, Country", "places": [{"name": "Official Local Name", "category": "Categorie"}]}\n' +
+            '[/LOCATIONS]\n\n' +
+            'Regels:\n' +
+            '- "city": de Engelse naam van de stad + land (bijv. "Lisbon, Portugal", "Prague, Czech Republic")\n' +
+            '- "name": de officiële lokale naam van de plek (bijv. "Torre de Belém", niet "Toren van Belém")\n' +
+            '- Voeg GEEN GPS-coördinaten toe, alleen namen\n' +
+            '- Als er geen specifieke locaties worden genoemd, laat het LOCATIONS blok weg\n' +
+            '- Mogelijke categorieën: Bezienswaardigheid, Restaurant, Museum, Park, Boulevard, Markt, Kerk, Hotel, Café, Overig';
 
         let apiKey = localStorage.getItem('gemini_api_key') || '';
         let conversationHistory = [];
+        let useGoogleSearch = true;
+        let geocodeAbortController = null;
 
+        // Map setup
         const map = L.map('map').setView([48.8, 10], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -161,6 +170,8 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
             'Overig': '#95a5a6'
         };
 
+        // --- API Key ---
+
         function checkApiKey() {
             if (!apiKey) {
                 document.getElementById('api-modal').style.display = 'flex';
@@ -169,10 +180,10 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
         }
 
         function saveApiKey() {
-            const key = document.getElementById('api-key-input').value.trim();
-            if (!key || !key.startsWith('AIza')) {
-                const err = document.getElementById('key-error');
-                err.textContent = 'Voer een geldige API key in (begint met AIza...).';
+            var key = document.getElementById('api-key-input').value.trim();
+            if (!key || key.length < 10) {
+                var err = document.getElementById('key-error');
+                err.textContent = 'Voer een geldige API key in.';
                 err.style.display = 'block';
                 return;
             }
@@ -183,10 +194,12 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
             document.getElementById('user-input').focus();
         }
 
+        // --- Chat UI ---
+
         function addMessage(content, role) {
-            const messagesEl = document.getElementById('messages');
-            const msgEl = document.createElement('div');
-            msgEl.className = `message ${role}`;
+            var messagesEl = document.getElementById('messages');
+            var msgEl = document.createElement('div');
+            msgEl.className = 'message ' + role;
 
             if (role === 'assistant') {
                 msgEl.innerHTML = marked.parse(content);
@@ -200,8 +213,8 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
         }
 
         function showTyping() {
-            const messagesEl = document.getElementById('messages');
-            const el = document.createElement('div');
+            var messagesEl = document.getElementById('messages');
+            var el = document.createElement('div');
             el.className = 'typing';
             el.id = 'typing-indicator';
             el.innerHTML = '<span></span><span></span><span></span>';
@@ -210,33 +223,143 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
         }
 
         function hideTyping() {
-            const el = document.getElementById('typing-indicator');
+            var el = document.getElementById('typing-indicator');
             if (el) el.remove();
         }
 
-        function parseResponse(text) {
-            const locMatch = text.match(/\[LOCATIONS\]([\s\S]*?)\[\/LOCATIONS\]/);
-            let locations = [];
-            let displayText = text;
+        // --- Response parsing ---
 
-            if (locMatch) {
-                try {
-                    locations = JSON.parse(locMatch[1].trim());
-                } catch (e) {
-                    console.warn('Locaties parseren mislukt:', e);
+        function cleanResponseText(text) {
+            // Remove <think> blocks (Gemini thinking tokens that leak into text)
+            text = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+            // Remove [LOCATIONS] block
+            text = text.replace(/\[LOCATIONS\][\s\S]*?\[\/LOCATIONS\]/, '');
+            return text.trim();
+        }
+
+        function extractLocations(text) {
+            var locMatch = text.match(/\[LOCATIONS\]([\s\S]*?)\[\/LOCATIONS\]/);
+            if (!locMatch) return null;
+
+            try {
+                var data = JSON.parse(locMatch[1].trim());
+                if (data.city && Array.isArray(data.places)) {
+                    return data;
                 }
-                displayText = text.replace(/\[LOCATIONS\][\s\S]*?\[\/LOCATIONS\]/, '').trim();
+                // Fallback: if it's an array directly (old format)
+                if (Array.isArray(data)) {
+                    return { city: '', places: data };
+                }
+            } catch (e) {
+                console.warn('Locaties parseren mislukt:', e);
+            }
+            return null;
+        }
+
+        // --- Nominatim geocoding ---
+
+        function setMapLoading(show, text) {
+            var el = document.getElementById('map-loading');
+            el.style.display = show ? 'flex' : 'none';
+            if (text) document.getElementById('map-loading-text').textContent = text;
+        }
+
+        function sleep(ms) {
+            return new Promise(function(resolve) { setTimeout(resolve, ms); });
+        }
+
+        async function geocodePlace(name, city) {
+            var query = name + ', ' + city;
+            var url = NOMINATIM_URL + '?q=' + encodeURIComponent(query) + '&format=json&limit=1&accept-language=nl';
+            var resp = await fetch(url);
+            var results = await resp.json();
+
+            if (results.length > 0) {
+                return {
+                    lat: parseFloat(results[0].lat),
+                    lon: parseFloat(results[0].lon)
+                };
             }
 
-            return { text: displayText, locations: locations };
+            // Fallback: try just the name without city
+            url = NOMINATIM_URL + '?q=' + encodeURIComponent(name) + '&format=json&limit=1';
+            resp = await fetch(url);
+            results = await resp.json();
+
+            if (results.length > 0) {
+                return {
+                    lat: parseFloat(results[0].lat),
+                    lon: parseFloat(results[0].lon)
+                };
+            }
+
+            return null;
         }
+
+        async function geocodeAndShowLocations(locationData) {
+            if (!locationData || !locationData.places || locationData.places.length === 0) return;
+
+            // Cancel any previous geocoding
+            if (geocodeAbortController) {
+                geocodeAbortController.abort();
+            }
+            geocodeAbortController = new AbortController();
+            var signal = geocodeAbortController.signal;
+
+            var city = locationData.city;
+            var places = locationData.places;
+            var total = places.length;
+
+            markersLayer.clearLayers();
+            if (legendControl) {
+                map.removeControl(legendControl);
+                legendControl = null;
+            }
+
+            setMapLoading(true, 'Locaties opzoeken... (0/' + total + ')');
+
+            var geocoded = [];
+
+            for (var i = 0; i < places.length; i++) {
+                if (signal.aborted) return;
+
+                var place = places[i];
+                setMapLoading(true, 'Locaties opzoeken... (' + (i + 1) + '/' + total + ')');
+
+                try {
+                    var coords = await geocodePlace(place.name, city);
+                    if (coords) {
+                        geocoded.push({
+                            name: place.name,
+                            category: place.category || 'Overig',
+                            lat: coords.lat,
+                            lon: coords.lon
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Geocoding mislukt voor:', place.name, e);
+                }
+
+                // Respect Nominatim rate limit: 1 request/second
+                if (i < places.length - 1) {
+                    await sleep(1000);
+                }
+            }
+
+            if (signal.aborted) return;
+
+            setMapLoading(false);
+            showOnMap(geocoded);
+        }
+
+        // --- Map display ---
 
         function createCircleIcon(color) {
             return L.divIcon({
-                html: `<svg width="24" height="36" viewBox="0 0 24 36">
-                    <path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
-                    <circle cx="12" cy="11" r="5" fill="#fff"/>
-                </svg>`,
+                html: '<svg width="24" height="36" viewBox="0 0 24 36">' +
+                    '<path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
+                    '<circle cx="12" cy="11" r="5" fill="#fff"/>' +
+                    '</svg>',
                 className: '',
                 iconSize: [24, 36],
                 iconAnchor: [12, 36],
@@ -253,14 +376,18 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
 
             if (locations.length === 0) return;
 
-            const categories = [...new Set(locations.map(l => l.category))];
-            const bounds = L.latLngBounds();
+            var categories = [];
+            locations.forEach(function(l) {
+                if (categories.indexOf(l.category) === -1) categories.push(l.category);
+            });
+
+            var bounds = L.latLngBounds();
 
             locations.forEach(function(loc) {
-                const color = CATEGORY_COLORS[loc.category] || CATEGORY_COLORS['Overig'];
-                const icon = createCircleIcon(color);
-                const marker = L.marker([loc.lat, loc.lon], { icon: icon });
-                marker.bindPopup(`<strong>${loc.name}</strong><br><em>${loc.category}</em>`);
+                var color = CATEGORY_COLORS[loc.category] || CATEGORY_COLORS['Overig'];
+                var icon = createCircleIcon(color);
+                var marker = L.marker([loc.lat, loc.lon], { icon: icon });
+                marker.bindPopup('<strong>' + loc.name + '</strong><br><em>' + loc.category + '</em>');
                 markersLayer.addLayer(marker);
                 bounds.extend([loc.lat, loc.lon]);
             });
@@ -270,12 +397,12 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
             if (categories.length > 1) {
                 legendControl = L.control({ position: 'bottomright' });
                 legendControl.onAdd = function() {
-                    const div = L.DomUtil.create('div', 'legend');
+                    var div = L.DomUtil.create('div', 'legend');
                     categories.forEach(function(cat) {
-                        const item = document.createElement('div');
+                        var item = document.createElement('div');
                         item.className = 'legend-item';
-                        const c = CATEGORY_COLORS[cat] || CATEGORY_COLORS['Overig'];
-                        item.innerHTML = `<span class="legend-dot" style="background:${c}"></span> ${cat}`;
+                        var c = CATEGORY_COLORS[cat] || CATEGORY_COLORS['Overig'];
+                        item.innerHTML = '<span class="legend-dot" style="background:' + c + '"></span> ' + cat;
                         div.appendChild(item);
                     });
                     return div;
@@ -284,9 +411,43 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
             }
         }
 
+        // --- Gemini API ---
+
+        async function callGemini(history) {
+            var body = {
+                system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                contents: history
+            };
+
+            if (useGoogleSearch) {
+                body.tools = [{ google_search: {} }];
+            }
+
+            var response = await fetch(API_URL + '?key=' + apiKey, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                var errData = await response.json();
+                var errMsg = (errData.error && errData.error.message) || 'API fout';
+                // If google_search not supported, retry without it
+                if (useGoogleSearch && (response.status === 400 || errMsg.toLowerCase().indexOf('tool') !== -1 || errMsg.toLowerCase().indexOf('search') !== -1)) {
+                    useGoogleSearch = false;
+                    return callGemini(history);
+                }
+                throw new Error(errMsg);
+            }
+
+            return response.json();
+        }
+
+        // --- Send message ---
+
         async function sendMessage() {
-            const input = document.getElementById('user-input');
-            const text = input.value.trim();
+            var input = document.getElementById('user-input');
+            var text = input.value.trim();
             if (!text) return;
 
             if (!apiKey) {
@@ -303,49 +464,40 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
             document.getElementById('send-btn').disabled = true;
 
             try {
-                const body = {
-                    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-                    contents: conversationHistory,
-                    tools: [{ google_search: {} }]
-                };
-
-                const response = await fetch(API_URL + '?key=' + apiKey, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    if (response.status === 400 || response.status === 403) {
-                        throw new Error(err.error?.message || 'Ongeldige API key of verzoek.');
-                    }
-                    throw new Error(err.error?.message || 'API fout (' + response.status + ')');
-                }
-
-                const data = await response.json();
+                var data = await callGemini(conversationHistory);
 
                 if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
                     throw new Error('Geen antwoord ontvangen van Gemini.');
                 }
 
-                const parts = data.candidates[0].content.parts;
-                const fullText = parts.filter(function(p) { return p.text; }).map(function(p) { return p.text; }).join('');
+                var parts = data.candidates[0].content.parts;
+                // Filter out thinking tokens (parts with thought: true)
+                var fullText = parts
+                    .filter(function(p) { return p.text && !p.thought; })
+                    .map(function(p) { return p.text; })
+                    .join('');
 
+                // Store full text in history for context
                 conversationHistory.push({ role: 'model', parts: [{ text: fullText }] });
 
-                const parsed = parseResponse(fullText);
+                // Extract locations before cleaning text
+                var locationData = extractLocations(fullText);
+
+                // Clean text for display (removes thinking tags, LOCATIONS block)
+                var displayText = cleanResponseText(fullText);
 
                 hideTyping();
-                addMessage(parsed.text, 'assistant');
 
-                if (parsed.locations.length > 0) {
-                    showOnMap(parsed.locations);
+                // Step 1: Show text immediately so user can start reading
+                addMessage(displayText, 'assistant');
+
+                // Step 2: Geocode locations in the background and update map
+                if (locationData) {
+                    geocodeAndShowLocations(locationData);
                 }
             } catch (e) {
                 hideTyping();
                 addMessage('Er ging iets mis: ' + e.message, 'assistant');
-                // Remove failed user message from history so conversation stays clean
                 conversationHistory.pop();
             }
 
@@ -353,7 +505,8 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
             input.focus();
         }
 
-        // Event listeners
+        // --- Event listeners ---
+
         document.getElementById('send-btn').addEventListener('click', sendMessage);
 
         document.getElementById('user-input').addEventListener('keydown', function(e) {
@@ -373,6 +526,7 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
         });
 
         document.getElementById('new-btn').addEventListener('click', function() {
+            if (geocodeAbortController) geocodeAbortController.abort();
             conversationHistory = [];
             document.getElementById('messages').innerHTML =
                 '<div class="message welcome">' +
@@ -384,6 +538,7 @@ CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
                 map.removeControl(legendControl);
                 legendControl = null;
             }
+            setMapLoading(false);
             map.setView([48.8, 10], 4);
             document.getElementById('user-input').focus();
         });
