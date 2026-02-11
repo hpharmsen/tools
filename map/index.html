@@ -9,16 +9,23 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; height: 100vh; display: flex; background: #f5f5f5; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #f5f5f5; }
 
-        .chat-panel { width: 55%; display: flex; flex-direction: column; height: 100vh; }
-        .map-panel { width: 45%; height: 100vh; position: relative; }
-
-        .header { background: #2c3e50; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+        .header { background: #2c3e50; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
         .header h1 { font-size: 1.3em; font-weight: 700; }
         .header-btns { display: flex; gap: 8px; }
         .header-btn { background: rgba(255,255,255,0.15); color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
         .header-btn:hover { background: rgba(255,255,255,0.25); }
+
+        .mobile-tabs { display: none; flex-shrink: 0; background: #34495e; }
+        .mobile-tabs .tab { flex: 1; padding: 10px; border: none; background: transparent; color: rgba(255,255,255,0.5); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
+        .mobile-tabs .tab.active { color: white; border-bottom-color: #4a90d9; }
+        .tab-badge { width: 8px; height: 8px; background: #e74c3c; border-radius: 50%; margin-left: 6px; vertical-align: middle; display: none; }
+
+        .content { display: flex; flex: 1; min-height: 0; }
+
+        .chat-panel { width: 55%; display: flex; flex-direction: column; min-height: 0; }
+        .map-panel { width: 45%; position: relative; }
 
         .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         .message { max-width: 88%; padding: 12px 16px; border-radius: 12px; line-height: 1.6; font-size: 14px; }
@@ -44,7 +51,7 @@
         .typing span:nth-child(3) { animation-delay: 0.4s; }
         @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
 
-        .input-area { padding: 12px 16px; background: white; border-top: 1px solid #e0e0e0; display: flex; gap: 8px; }
+        .input-area { padding: 12px 16px; background: white; border-top: 1px solid #e0e0e0; display: flex; gap: 8px; flex-shrink: 0; }
         .input-area input { flex: 1; padding: 10px 16px; border: 2px solid #e0e0e0; border-radius: 20px; font-size: 14px; outline: none; }
         .input-area input:focus { border-color: #4a90d9; }
         .input-area button { background: #4a90d9; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: 600; white-space: nowrap; }
@@ -73,37 +80,46 @@
         .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
 
         @media (max-width: 768px) {
-            body { flex-direction: column; }
-            .chat-panel { width: 100%; height: 55vh; }
-            .map-panel { width: 100%; height: 45vh; }
+            .mobile-tabs { display: flex; }
+            .content { flex-direction: column; }
+            .chat-panel { width: 100%; flex: 1; }
+            .map-panel { width: 100%; flex: 1; display: none; }
+            body.show-map .chat-panel { display: none; }
+            body.show-map .map-panel { display: block; }
         }
     </style>
 </head>
 <body>
-    <div class="chat-panel">
-        <div class="header">
-            <h1>City Explorer</h1>
-            <div class="header-btns">
-                <button class="header-btn" id="new-btn">Nieuwe stad</button>
-                <button class="header-btn" id="key-btn">API Key</button>
-            </div>
-        </div>
-        <div class="messages" id="messages">
-            <div class="message welcome">
-                <h2>Welkom bij City Explorer!</h2>
-                <p>Typ de naam van een stad en ontdek de mooiste bezienswaardigheden en lekkerste restaurants.</p>
-            </div>
-        </div>
-        <div class="input-area">
-            <input type="text" id="user-input" placeholder="Bijv. 'Lissabon' of 'Welke restaurants bij het centrum?'" />
-            <button id="send-btn">Verstuur</button>
+    <div class="header">
+        <h1>City Explorer</h1>
+        <div class="header-btns">
+            <button class="header-btn" id="new-btn">Nieuwe stad</button>
+            <button class="header-btn" id="key-btn">API Key</button>
         </div>
     </div>
-    <div class="map-panel">
-        <div id="map"></div>
-        <div class="map-loading" id="map-loading">
-            <span class="spinner"></span>
-            <span id="map-loading-text">Locaties opzoeken...</span>
+    <div class="mobile-tabs" id="mobile-tabs">
+        <button class="tab active" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="map">Kaart <span class="tab-badge" id="map-badge"></span></button>
+    </div>
+    <div class="content">
+        <div class="chat-panel" id="chat-panel">
+            <div class="messages" id="messages">
+                <div class="message welcome">
+                    <h2>Welkom bij City Explorer!</h2>
+                    <p>Typ de naam van een stad en ontdek de mooiste bezienswaardigheden en lekkerste restaurants.</p>
+                </div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="user-input" placeholder="Bijv. 'Lissabon' of 'Welke restaurants bij het centrum?'" />
+                <button id="send-btn">Verstuur</button>
+            </div>
+        </div>
+        <div class="map-panel" id="map-panel">
+            <div id="map"></div>
+            <div class="map-loading" id="map-loading">
+                <span class="spinner"></span>
+                <span id="map-loading-text">Locaties opzoeken...</span>
+            </div>
         </div>
     </div>
 
@@ -118,11 +134,11 @@
     </div>
 
     <script>
-        const MODEL = 'gemini-2.5-flash';
-        const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';
-        const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+        var MODEL = 'gemini-2.5-flash';
+        var API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';
+        var NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 
-        const SYSTEM_PROMPT = 'Je bent City Explorer, een Nederlandstalige stadsgids gericht op stellen tussen 30 en 70 jaar. Je bent gespecialiseerd in het verkennen van stedelijke hoogtepunten en architectuur, met een extra focus op plekken waar je lekker kunt eten.\n\n' +
+        var SYSTEM_PROMPT = 'Je bent City Explorer, een Nederlandstalige stadsgids gericht op stellen tussen 30 en 70 jaar. Je bent gespecialiseerd in het verkennen van stedelijke hoogtepunten en architectuur, met een extra focus op plekken waar je lekker kunt eten.\n\n' +
             'Je stijl:\n' +
             '- Vriendelijk en enthousiast\n' +
             '- Je geeft top 10 lijsten van bezienswaardigheden als iemand een stad noemt\n' +
@@ -142,22 +158,23 @@
             '- Als er geen specifieke locaties worden genoemd, laat het LOCATIONS blok weg\n' +
             '- Mogelijke categorieën: Bezienswaardigheid, Restaurant, Museum, Park, Boulevard, Markt, Kerk, Hotel, Café, Overig';
 
-        let apiKey = localStorage.getItem('gemini_api_key') || '';
-        let conversationHistory = [];
-        let useGoogleSearch = true;
-        let geocodeAbortController = null;
+        var apiKey = localStorage.getItem('gemini_api_key') || '';
+        var conversationHistory = [];
+        var useGoogleSearch = true;
+        var geocodeAbortController = null;
+        var activeTab = 'chat';
 
         // Map setup
-        const map = L.map('map').setView([48.8, 10], 4);
+        var map = L.map('map').setView([48.8, 10], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
             maxZoom: 19
         }).addTo(map);
 
-        let markersLayer = L.layerGroup().addTo(map);
-        let legendControl = null;
+        var markersLayer = L.layerGroup().addTo(map);
+        var legendControl = null;
 
-        const CATEGORY_COLORS = {
+        var CATEGORY_COLORS = {
             'Bezienswaardigheid': '#e74c3c',
             'Restaurant': '#f39c12',
             'Museum': '#9b59b6',
@@ -169,6 +186,35 @@
             'Café': '#d35400',
             'Overig': '#95a5a6'
         };
+
+        // --- Tabs ---
+
+        function switchTab(tab) {
+            activeTab = tab;
+            document.querySelectorAll('.mobile-tabs .tab').forEach(function(t) {
+                t.classList.toggle('active', t.dataset.tab === tab);
+            });
+            if (tab === 'map') {
+                document.body.classList.add('show-map');
+                document.getElementById('map-badge').style.display = 'none';
+                // Leaflet must recalculate size when container becomes visible
+                setTimeout(function() { map.invalidateSize(); }, 50);
+            } else {
+                document.body.classList.remove('show-map');
+            }
+        }
+
+        document.getElementById('mobile-tabs').addEventListener('click', function(e) {
+            var tab = e.target.closest('.tab');
+            if (tab) switchTab(tab.dataset.tab);
+        });
+
+        function notifyMapReady() {
+            // Show badge on Kaart tab if user is on Chat tab (mobile only)
+            if (activeTab === 'chat' && window.innerWidth <= 768) {
+                document.getElementById('map-badge').style.display = 'inline-block';
+            }
+        }
 
         // --- API Key ---
 
@@ -230,9 +276,7 @@
         // --- Response parsing ---
 
         function cleanResponseText(text) {
-            // Remove <think> blocks (Gemini thinking tokens that leak into text)
             text = text.replace(/<think>[\s\S]*?<\/think>/g, '');
-            // Remove [LOCATIONS] block
             text = text.replace(/\[LOCATIONS\][\s\S]*?\[\/LOCATIONS\]/, '');
             return text.trim();
         }
@@ -246,7 +290,6 @@
                 if (data.city && Array.isArray(data.places)) {
                     return data;
                 }
-                // Fallback: if it's an array directly (old format)
                 if (Array.isArray(data)) {
                     return { city: '', places: data };
                 }
@@ -281,7 +324,6 @@
                 };
             }
 
-            // Fallback: try just the name without city
             url = NOMINATIM_URL + '?q=' + encodeURIComponent(name) + '&format=json&limit=1';
             resp = await fetch(url);
             results = await resp.json();
@@ -299,7 +341,6 @@
         async function geocodeAndShowLocations(locationData) {
             if (!locationData || !locationData.places || locationData.places.length === 0) return;
 
-            // Cancel any previous geocoding
             if (geocodeAbortController) {
                 geocodeAbortController.abort();
             }
@@ -340,7 +381,6 @@
                     console.warn('Geocoding mislukt voor:', place.name, e);
                 }
 
-                // Respect Nominatim rate limit: 1 request/second
                 if (i < places.length - 1) {
                     await sleep(1000);
                 }
@@ -350,6 +390,7 @@
 
             setMapLoading(false);
             showOnMap(geocoded);
+            notifyMapReady();
         }
 
         // --- Map display ---
@@ -432,7 +473,6 @@
             if (!response.ok) {
                 var errData = await response.json();
                 var errMsg = (errData.error && errData.error.message) || 'API fout';
-                // If google_search not supported, retry without it
                 if (useGoogleSearch && (response.status === 400 || errMsg.toLowerCase().indexOf('tool') !== -1 || errMsg.toLowerCase().indexOf('search') !== -1)) {
                     useGoogleSearch = false;
                     return callGemini(history);
@@ -471,27 +511,19 @@
                 }
 
                 var parts = data.candidates[0].content.parts;
-                // Filter out thinking tokens (parts with thought: true)
                 var fullText = parts
                     .filter(function(p) { return p.text && !p.thought; })
                     .map(function(p) { return p.text; })
                     .join('');
 
-                // Store full text in history for context
                 conversationHistory.push({ role: 'model', parts: [{ text: fullText }] });
 
-                // Extract locations before cleaning text
                 var locationData = extractLocations(fullText);
-
-                // Clean text for display (removes thinking tags, LOCATIONS block)
                 var displayText = cleanResponseText(fullText);
 
                 hideTyping();
-
-                // Step 1: Show text immediately so user can start reading
                 addMessage(displayText, 'assistant');
 
-                // Step 2: Geocode locations in the background and update map
                 if (locationData) {
                     geocodeAndShowLocations(locationData);
                 }
@@ -540,6 +572,8 @@
             }
             setMapLoading(false);
             map.setView([48.8, 10], 4);
+            document.getElementById('map-badge').style.display = 'none';
+            if (activeTab === 'map') switchTab('chat');
             document.getElementById('user-input').focus();
         });
 
