@@ -1,5 +1,5 @@
 {
-  "name": "CSV Map Viewer",
-  "description": "Plak CSV data met locaties en bekijk ze op een OpenStreetMap kaart.",
-  "icon": "🗺️"
+  "name": "City Explorer",
+  "description": "Ontdek bezienswaardigheden en restaurants in elke stad met een AI-stadsgids en interactieve kaart.",
+  "icon": "🏛️"
 }

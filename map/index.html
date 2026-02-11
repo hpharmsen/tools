@@ -3,201 +3,232 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Map Viewer</title>
+    <title>City Explorer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            background: #f0f0f0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        header {
-            background: #fff;
-            padding: 12px 20px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-            z-index: 1000;
-        }
-        header h1 {
-            font-size: 1.2em;
-            color: #333;
-            margin-bottom: 8px;
-        }
-        .input-row {
-            display: flex;
-            gap: 8px;
-            align-items: stretch;
-        }
-        #csv-input {
-            flex: 1;
-            padding: 8px 12px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 13px;
-            resize: none;
-            height: 80px;
-            line-height: 1.4;
-        }
-        #csv-input:focus {
-            outline: none;
-            border-color: #4a90d9;
-        }
-        .btn-col {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        button {
-            padding: 8px 18px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: background 0.2s;
-        }
-        #show-btn {
-            background: #4a90d9;
-            color: #fff;
-            flex: 1;
-        }
-        #show-btn:hover {
-            background: #357abd;
-        }
-        #clear-btn {
-            background: #e0e0e0;
-            color: #555;
-            flex: 0;
-            font-size: 12px;
-            padding: 4px 18px;
-        }
-        #clear-btn:hover {
-            background: #d0d0d0;
-        }
-        #map {
-            flex: 1;
-        }
-        .legend {
-            background: white;
-            padding: 10px 14px;
-            border-radius: 6px;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.3);
-            line-height: 1.8;
-            font-size: 13px;
-        }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .legend-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            border: 1px solid rgba(0,0,0,0.2);
-        }
-        .error-msg {
-            background: #fee;
-            color: #c00;
-            padding: 8px 12px;
-            border-radius: 4px;
-            margin-top: 6px;
-            font-size: 13px;
-            display: none;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; height: 100vh; display: flex; background: #f5f5f5; }
+
+        .chat-panel { width: 55%; display: flex; flex-direction: column; height: 100vh; }
+        .map-panel { width: 45%; height: 100vh; }
+
+        .header { background: #2c3e50; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { font-size: 1.3em; font-weight: 700; }
+        .header-btns { display: flex; gap: 8px; }
+        .header-btn { background: rgba(255,255,255,0.15); color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .header-btn:hover { background: rgba(255,255,255,0.25); }
+
+        .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .message { max-width: 88%; padding: 12px 16px; border-radius: 12px; line-height: 1.6; font-size: 14px; }
+        .message.user { background: #4a90d9; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .message.assistant { background: white; color: #333; align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .message.assistant h1, .message.assistant h2, .message.assistant h3 { margin: 10px 0 4px; color: #2c3e50; }
+        .message.assistant h1 { font-size: 1.2em; }
+        .message.assistant h2 { font-size: 1.1em; }
+        .message.assistant h3 { font-size: 1em; }
+        .message.assistant ul, .message.assistant ol { margin: 4px 0 4px 20px; }
+        .message.assistant li { margin: 2px 0; }
+        .message.assistant p { margin: 6px 0; }
+        .message.assistant strong { color: #2c3e50; }
+        .message.assistant a { color: #4a90d9; }
+        .message.assistant hr { border: none; border-top: 1px solid #eee; margin: 10px 0; }
+        .message.welcome { background: #eef6ff; color: #2c3e50; align-self: center; text-align: center; max-width: 90%; padding: 24px; }
+        .message.welcome h2 { margin-bottom: 8px; color: #2c3e50; }
+        .message.welcome p { color: #555; }
+
+        .typing { display: flex; gap: 4px; padding: 14px 18px; background: white; border-radius: 12px; align-self: flex-start; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .typing span { width: 8px; height: 8px; background: #bbb; border-radius: 50%; animation: bounce 1.2s infinite; }
+        .typing span:nth-child(2) { animation-delay: 0.2s; }
+        .typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+        .input-area { padding: 12px 16px; background: white; border-top: 1px solid #e0e0e0; display: flex; gap: 8px; }
+        .input-area input { flex: 1; padding: 10px 16px; border: 2px solid #e0e0e0; border-radius: 20px; font-size: 14px; outline: none; }
+        .input-area input:focus { border-color: #4a90d9; }
+        .input-area button { background: #4a90d9; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: 600; white-space: nowrap; }
+        .input-area button:hover { background: #357abd; }
+        .input-area button:disabled { background: #ccc; cursor: not-allowed; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .modal { background: white; padding: 30px; border-radius: 12px; max-width: 440px; width: 90%; }
+        .modal h2 { margin-bottom: 10px; color: #2c3e50; }
+        .modal p { margin-bottom: 16px; color: #666; font-size: 14px; line-height: 1.5; }
+        .modal p a { color: #4a90d9; }
+        .modal input { width: 100%; padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; margin-bottom: 12px; outline: none; }
+        .modal input:focus { border-color: #4a90d9; }
+        .modal button { background: #4a90d9; color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; width: 100%; }
+        .modal button:hover { background: #357abd; }
+        .modal .error { color: #c00; font-size: 13px; margin-bottom: 8px; display: none; }
+
+        #map { width: 100%; height: 100%; }
+        .legend { background: white; padding: 10px 14px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); line-height: 1.8; font-size: 13px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .chat-panel { width: 100%; height: 55vh; }
+            .map-panel { width: 100%; height: 45vh; }
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>CSV Map Viewer</h1>
-        <div class="input-row">
-            <textarea id="csv-input" placeholder="Plak hier CSV data: naam,categorie,lat,long"></textarea>
-            <div class="btn-col">
-                <button id="show-btn">Toon op kaart</button>
-                <button id="clear-btn">Wissen</button>
+    <div class="chat-panel">
+        <div class="header">
+            <h1>City Explorer</h1>
+            <div class="header-btns">
+                <button class="header-btn" id="new-btn">Nieuwe stad</button>
+                <button class="header-btn" id="key-btn">API Key</button>
             </div>
         </div>
-        <div id="error" class="error-msg"></div>
-    </header>
-    <div id="map"></div>
+        <div class="messages" id="messages">
+            <div class="message welcome">
+                <h2>Welkom bij City Explorer!</h2>
+                <p>Typ de naam van een stad en ontdek de mooiste bezienswaardigheden en lekkerste restaurants.</p>
+            </div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Bijv. 'Lissabon' of 'Welke restaurants bij het centrum?'" />
+            <button id="send-btn">Verstuur</button>
+        </div>
+    </div>
+    <div class="map-panel">
+        <div id="map"></div>
+    </div>
+
+    <div class="modal-overlay" id="api-modal" style="display:none;">
+        <div class="modal">
+            <h2>Gemini API Key</h2>
+            <p>Voer je Google Gemini API key in. Je kunt er gratis een aanmaken op <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a>.</p>
+            <div class="error" id="key-error"></div>
+            <input type="password" id="api-key-input" placeholder="AIza..." />
+            <button id="save-key-btn">Opslaan</button>
+        </div>
+    </div>
 
     <script>
-        const CATEGORY_COLORS = [
-            '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
-            '#9b59b6', '#1abc9c', '#e67e22', '#34495e',
-            '#d35400', '#16a085', '#c0392b', '#2980b9'
-        ];
+        const MODEL = 'gemini-2.5-flash';
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-        const map = L.map('map').setView([0, 0], 2);
+        const SYSTEM_PROMPT = `Je bent City Explorer, een Nederlandstalige stadsgids gericht op stellen tussen 30 en 70 jaar. Je bent gespecialiseerd in het verkennen van stedelijke hoogtepunten en architectuur, met een extra focus op plekken waar je lekker kunt eten.
+
+Je stijl:
+- Vriendelijk en enthousiast
+- Je geeft top 10 lijsten van bezienswaardigheden als iemand een stad noemt
+- Extra aandacht voor restaurants en culinaire ervaringen
+- Informatie is gericht op stellen in de leeftijdsgroep 30-70
+- Je vraagt om verduidelijking bij onduidelijke verzoeken
+- Je antwoordt altijd in het Nederlands
+
+BELANGRIJK TECHNISCH VEREISTE:
+Voeg aan het EINDE van elk antwoord een JSON-blok toe met alle genoemde locaties en hun exacte GPS-coördinaten. Gebruik PRECIES dit formaat:
+
+[LOCATIONS]
+[{"name": "Naam", "category": "Categorie", "lat": 12.3456, "lon": 78.9012}]
+[/LOCATIONS]
+
+Mogelijke categorieën: Bezienswaardigheid, Restaurant, Museum, Park, Boulevard, Markt, Kerk, Hotel, Café, Overig
+
+CRUCIAAL: De GPS-coördinaten MOETEN exact kloppen. Zorg ervoor dat:
+- Latitude en longitude niet verwisseld zijn
+- De locaties op het land vallen, niet in zee
+- De coördinaten verwijzen naar het exacte adres van de locatie`;
+
+        let apiKey = localStorage.getItem('gemini_api_key') || '';
+        let conversationHistory = [];
+
+        const map = L.map('map').setView([48.8, 10], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
             maxZoom: 19
         }).addTo(map);
 
         let markersLayer = L.layerGroup().addTo(map);
         let legendControl = null;
 
-        function parseCSV(text) {
-            const lines = text.trim().split('\n').filter(l => l.trim());
-            if (lines.length < 2) throw new Error('CSV heeft minstens een header en één datarij nodig.');
+        const CATEGORY_COLORS = {
+            'Bezienswaardigheid': '#e74c3c',
+            'Restaurant': '#f39c12',
+            'Museum': '#9b59b6',
+            'Park': '#2ecc71',
+            'Boulevard': '#3498db',
+            'Markt': '#e67e22',
+            'Kerk': '#34495e',
+            'Hotel': '#1abc9c',
+            'Café': '#d35400',
+            'Overig': '#95a5a6'
+        };
 
-            const header = lines[0].split(',').map(h => h.trim().toLowerCase());
-            const nameIdx = header.findIndex(h => h === 'naam' || h === 'name');
-            const catIdx = header.findIndex(h => h === 'categorie' || h === 'category');
-            const latIdx = header.findIndex(h => h === 'lat' || h === 'latitude');
-            const lonIdx = header.findIndex(h => h === 'long' || h === 'lon' || h === 'longitude' || h === 'lng');
-
-            if (latIdx === -1 || lonIdx === -1) {
-                throw new Error('CSV moet kolommen "lat" en "long" bevatten.');
+        function checkApiKey() {
+            if (!apiKey) {
+                document.getElementById('api-modal').style.display = 'flex';
+                document.getElementById('api-key-input').focus();
             }
-
-            const items = [];
-            for (let i = 1; i < lines.length; i++) {
-                const parts = splitCSVLine(lines[i]);
-                if (parts.length < Math.max(latIdx, lonIdx) + 1) continue;
-
-                const lat = parseFloat(parts[latIdx]);
-                const lon = parseFloat(parts[lonIdx]);
-                if (isNaN(lat) || isNaN(lon)) continue;
-
-                items.push({
-                    name: nameIdx !== -1 ? parts[nameIdx].trim() : `Punt ${i}`,
-                    category: catIdx !== -1 ? parts[catIdx].trim() : 'Overig',
-                    lat: lat,
-                    lon: lon
-                });
-            }
-
-            if (items.length === 0) throw new Error('Geen geldige locaties gevonden in de CSV data.');
-            return items;
         }
 
-        function splitCSVLine(line) {
-            const parts = [];
-            let current = '';
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-                const ch = line[i];
-                if (ch === '"') {
-                    inQuotes = !inQuotes;
-                } else if (ch === ',' && !inQuotes) {
-                    parts.push(current);
-                    current = '';
-                } else {
-                    current += ch;
-                }
+        function saveApiKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            if (!key || !key.startsWith('AIza')) {
+                const err = document.getElementById('key-error');
+                err.textContent = 'Voer een geldige API key in (begint met AIza...).';
+                err.style.display = 'block';
+                return;
             }
-            parts.push(current);
-            return parts;
+            apiKey = key;
+            localStorage.setItem('gemini_api_key', key);
+            document.getElementById('api-modal').style.display = 'none';
+            document.getElementById('key-error').style.display = 'none';
+            document.getElementById('user-input').focus();
+        }
+
+        function addMessage(content, role) {
+            const messagesEl = document.getElementById('messages');
+            const msgEl = document.createElement('div');
+            msgEl.className = `message ${role}`;
+
+            if (role === 'assistant') {
+                msgEl.innerHTML = marked.parse(content);
+            } else {
+                msgEl.textContent = content;
+            }
+
+            messagesEl.appendChild(msgEl);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return msgEl;
+        }
+
+        function showTyping() {
+            const messagesEl = document.getElementById('messages');
+            const el = document.createElement('div');
+            el.className = 'typing';
+            el.id = 'typing-indicator';
+            el.innerHTML = '<span></span><span></span><span></span>';
+            messagesEl.appendChild(el);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function hideTyping() {
+            const el = document.getElementById('typing-indicator');
+            if (el) el.remove();
+        }
+
+        function parseResponse(text) {
+            const locMatch = text.match(/\[LOCATIONS\]([\s\S]*?)\[\/LOCATIONS\]/);
+            let locations = [];
+            let displayText = text;
+
+            if (locMatch) {
+                try {
+                    locations = JSON.parse(locMatch[1].trim());
+                } catch (e) {
+                    console.warn('Locaties parseren mislukt:', e);
+                }
+                displayText = text.replace(/\[LOCATIONS\][\s\S]*?\[\/LOCATIONS\]/, '').trim();
+            }
+
+            return { text: displayText, locations: locations };
         }
 
         function createCircleIcon(color) {
@@ -213,38 +244,38 @@
             });
         }
 
-        function showOnMap(items) {
+        function showOnMap(locations) {
             markersLayer.clearLayers();
             if (legendControl) {
                 map.removeControl(legendControl);
                 legendControl = null;
             }
 
-            const categories = [...new Set(items.map(it => it.category))];
-            const colorMap = {};
-            categories.forEach((cat, i) => {
-                colorMap[cat] = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
-            });
+            if (locations.length === 0) return;
 
+            const categories = [...new Set(locations.map(l => l.category))];
             const bounds = L.latLngBounds();
-            items.forEach(item => {
-                const icon = createCircleIcon(colorMap[item.category]);
-                const marker = L.marker([item.lat, item.lon], { icon: icon });
-                marker.bindPopup(`<strong>${item.name}</strong><br><em>${item.category}</em><br><small>${item.lat.toFixed(4)}, ${item.lon.toFixed(4)}</small>`);
+
+            locations.forEach(function(loc) {
+                const color = CATEGORY_COLORS[loc.category] || CATEGORY_COLORS['Overig'];
+                const icon = createCircleIcon(color);
+                const marker = L.marker([loc.lat, loc.lon], { icon: icon });
+                marker.bindPopup(`<strong>${loc.name}</strong><br><em>${loc.category}</em>`);
                 markersLayer.addLayer(marker);
-                bounds.extend([item.lat, item.lon]);
+                bounds.extend([loc.lat, loc.lon]);
             });
 
             map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
 
             if (categories.length > 1) {
                 legendControl = L.control({ position: 'bottomright' });
-                legendControl.onAdd = function () {
+                legendControl.onAdd = function() {
                     const div = L.DomUtil.create('div', 'legend');
-                    categories.forEach(cat => {
+                    categories.forEach(function(cat) {
                         const item = document.createElement('div');
                         item.className = 'legend-item';
-                        item.innerHTML = `<span class="legend-dot" style="background:${colorMap[cat]}"></span> ${cat}`;
+                        const c = CATEGORY_COLORS[cat] || CATEGORY_COLORS['Overig'];
+                        item.innerHTML = `<span class="legend-dot" style="background:${c}"></span> ${cat}`;
                         div.appendChild(item);
                     });
                     return div;
@@ -253,71 +284,112 @@
             }
         }
 
-        function showError(msg) {
-            const el = document.getElementById('error');
-            el.textContent = msg;
-            el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 5000);
-        }
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const text = input.value.trim();
+            if (!text) return;
 
-        document.getElementById('show-btn').addEventListener('click', function () {
-            const text = document.getElementById('csv-input').value.trim();
-            if (!text) {
-                showError('Plak eerst CSV data in het invoerveld.');
+            if (!apiKey) {
+                checkApiKey();
                 return;
             }
+
+            input.value = '';
+            addMessage(text, 'user');
+
+            conversationHistory.push({ role: 'user', parts: [{ text: text }] });
+
+            showTyping();
+            document.getElementById('send-btn').disabled = true;
+
             try {
-                const items = parseCSV(text);
-                showOnMap(items);
-                document.getElementById('error').style.display = 'none';
+                const body = {
+                    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                    contents: conversationHistory,
+                    tools: [{ google_search: {} }]
+                };
+
+                const response = await fetch(API_URL + '?key=' + apiKey, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    if (response.status === 400 || response.status === 403) {
+                        throw new Error(err.error?.message || 'Ongeldige API key of verzoek.');
+                    }
+                    throw new Error(err.error?.message || 'API fout (' + response.status + ')');
+                }
+
+                const data = await response.json();
+
+                if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+                    throw new Error('Geen antwoord ontvangen van Gemini.');
+                }
+
+                const parts = data.candidates[0].content.parts;
+                const fullText = parts.filter(function(p) { return p.text; }).map(function(p) { return p.text; }).join('');
+
+                conversationHistory.push({ role: 'model', parts: [{ text: fullText }] });
+
+                const parsed = parseResponse(fullText);
+
+                hideTyping();
+                addMessage(parsed.text, 'assistant');
+
+                if (parsed.locations.length > 0) {
+                    showOnMap(parsed.locations);
+                }
             } catch (e) {
-                showError(e.message);
+                hideTyping();
+                addMessage('Er ging iets mis: ' + e.message, 'assistant');
+                // Remove failed user message from history so conversation stays clean
+                conversationHistory.pop();
             }
+
+            document.getElementById('send-btn').disabled = false;
+            input.focus();
+        }
+
+        // Event listeners
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+        document.getElementById('user-input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') sendMessage();
         });
 
-        document.getElementById('clear-btn').addEventListener('click', function () {
-            document.getElementById('csv-input').value = '';
+        document.getElementById('save-key-btn').addEventListener('click', saveApiKey);
+
+        document.getElementById('api-key-input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') saveApiKey();
+        });
+
+        document.getElementById('key-btn').addEventListener('click', function() {
+            document.getElementById('api-key-input').value = apiKey;
+            document.getElementById('api-modal').style.display = 'flex';
+            document.getElementById('api-key-input').focus();
+        });
+
+        document.getElementById('new-btn').addEventListener('click', function() {
+            conversationHistory = [];
+            document.getElementById('messages').innerHTML =
+                '<div class="message welcome">' +
+                '<h2>Welkom bij City Explorer!</h2>' +
+                '<p>Typ de naam van een stad en ontdek de mooiste bezienswaardigheden en lekkerste restaurants.</p>' +
+                '</div>';
             markersLayer.clearLayers();
             if (legendControl) {
                 map.removeControl(legendControl);
                 legendControl = null;
             }
-            map.setView([0, 0], 2);
+            map.setView([48.8, 10], 4);
+            document.getElementById('user-input').focus();
         });
 
-        const SAMPLE_CSV = `naam,categorie,lat,long
-Estação Central dos Caminhos de Ferro,Bezienswaardigheid,-25.9697,32.5647
-Fortaleza de Maputo,Bezienswaardigheid,-25.9749,32.5705
-FEIMA Markt,Markt,-25.9684,32.5948
-Maputo Cathedral (Nossa Senhora da Conceição),Bezienswaardigheid,-25.9690,32.5750
-Tunduru Botanical Gardens,Park,-25.9716,32.5739
-Museu de História Natural,Museum,-25.9773,32.5869
-Avenida Marginal,Boulevard,-25.9500,32.6100
-O Farol,Restaurant,-25.9864,32.5595
-Costa do Sol Restaurante,Restaurant,-25.9169,32.6336
-Zambi,Restaurant,-25.9801,32.5794
-Dhow Mozambique,Restaurant,-25.9818,32.5877
-Sagres Shellfish Restaurant,Restaurant,-25.9697,32.5932`;
-
-        // Auto-load from URL hash or show sample data
-        if (window.location.hash) {
-            try {
-                const data = decodeURIComponent(window.location.hash.slice(1));
-                document.getElementById('csv-input').value = data;
-                const items = parseCSV(data);
-                showOnMap(items);
-            } catch (e) {
-                // Ignore invalid hash data
-            }
-        } else {
-            document.getElementById('csv-input').value = SAMPLE_CSV;
-            try {
-                const items = parseCSV(SAMPLE_CSV);
-                showOnMap(items);
-            } catch (e) {
-                // Ignore
-            }
-        }
+        // Init
+        checkApiKey();
     </script>
 </body>
 </html>
