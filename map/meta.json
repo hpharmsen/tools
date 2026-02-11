@@ -1,0 +1,5 @@
+{
+  "name": "CSV Map Viewer",
+  "description": "Plak CSV data met locaties en bekijk ze op een OpenStreetMap kaart.",
+  "icon": "🗺️"
+}

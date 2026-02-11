@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Map Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background: #fff;
+            padding: 12px 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        header h1 {
+            font-size: 1.2em;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .input-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+        #csv-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 13px;
+            resize: none;
+            height: 80px;
+            line-height: 1.4;
+        }
+        #csv-input:focus {
+            outline: none;
+            border-color: #4a90d9;
+        }
+        .btn-col {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        button {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        #show-btn {
+            background: #4a90d9;
+            color: #fff;
+            flex: 1;
+        }
+        #show-btn:hover {
+            background: #357abd;
+        }
+        #clear-btn {
+            background: #e0e0e0;
+            color: #555;
+            flex: 0;
+            font-size: 12px;
+            padding: 4px 18px;
+        }
+        #clear-btn:hover {
+            background: #d0d0d0;
+        }
+        #map {
+            flex: 1;
+        }
+        .legend {
+            background: white;
+            padding: 10px 14px;
+            border-radius: 6px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+            line-height: 1.8;
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            border: 1px solid rgba(0,0,0,0.2);
+        }
+        .error-msg {
+            background: #fee;
+            color: #c00;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-top: 6px;
+            font-size: 13px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>CSV Map Viewer</h1>
+        <div class="input-row">
+            <textarea id="csv-input" placeholder="Plak hier CSV data: naam,categorie,lat,long
+Estação Central,Bezienswaardigheid,-25.9665,32.5832
+FEIMA Markt,Markt,-25.9606,32.5892"></textarea>
+            <div class="btn-col">
+                <button id="show-btn">Toon op kaart</button>
+                <button id="clear-btn">Wissen</button>
+            </div>
+        </div>
+        <div id="error" class="error-msg"></div>
+    </header>
+    <div id="map"></div>
+
+    <script>
+        const CATEGORY_COLORS = [
+            '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
+            '#9b59b6', '#1abc9c', '#e67e22', '#34495e',
+            '#d35400', '#16a085', '#c0392b', '#2980b9'
+        ];
+
+        const map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        let markersLayer = L.layerGroup().addTo(map);
+        let legendControl = null;
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n').filter(l => l.trim());
+            if (lines.length < 2) throw new Error('CSV heeft minstens een header en één datarij nodig.');
+
+            const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const nameIdx = header.findIndex(h => h === 'naam' || h === 'name');
+            const catIdx = header.findIndex(h => h === 'categorie' || h === 'category');
+            const latIdx = header.findIndex(h => h === 'lat' || h === 'latitude');
+            const lonIdx = header.findIndex(h => h === 'long' || h === 'lon' || h === 'longitude' || h === 'lng');
+
+            if (latIdx === -1 || lonIdx === -1) {
+                throw new Error('CSV moet kolommen "lat" en "long" bevatten.');
+            }
+
+            const items = [];
+            for (let i = 1; i < lines.length; i++) {
+                const parts = splitCSVLine(lines[i]);
+                if (parts.length < Math.max(latIdx, lonIdx) + 1) continue;
+
+                const lat = parseFloat(parts[latIdx]);
+                const lon = parseFloat(parts[lonIdx]);
+                if (isNaN(lat) || isNaN(lon)) continue;
+
+                items.push({
+                    name: nameIdx !== -1 ? parts[nameIdx].trim() : `Punt ${i}`,
+                    category: catIdx !== -1 ? parts[catIdx].trim() : 'Overig',
+                    lat: lat,
+                    lon: lon
+                });
+            }
+
+            if (items.length === 0) throw new Error('Geen geldige locaties gevonden in de CSV data.');
+            return items;
+        }
+
+        function splitCSVLine(line) {
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') {
+                    inQuotes = !inQuotes;
+                } else if (ch === ',' && !inQuotes) {
+                    parts.push(current);
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            parts.push(current);
+            return parts;
+        }
+
+        function createCircleIcon(color) {
+            return L.divIcon({
+                html: `<svg width="24" height="36" viewBox="0 0 24 36">
+                    <path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+                    <circle cx="12" cy="11" r="5" fill="#fff"/>
+                </svg>`,
+                className: '',
+                iconSize: [24, 36],
+                iconAnchor: [12, 36],
+                popupAnchor: [0, -30]
+            });
+        }
+
+        function showOnMap(items) {
+            markersLayer.clearLayers();
+            if (legendControl) {
+                map.removeControl(legendControl);
+                legendControl = null;
+            }
+
+            const categories = [...new Set(items.map(it => it.category))];
+            const colorMap = {};
+            categories.forEach((cat, i) => {
+                colorMap[cat] = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+            });
+
+            const bounds = L.latLngBounds();
+            items.forEach(item => {
+                const icon = createCircleIcon(colorMap[item.category]);
+                const marker = L.marker([item.lat, item.lon], { icon: icon });
+                marker.bindPopup(`<strong>${item.name}</strong><br><em>${item.category}</em><br><small>${item.lat.toFixed(4)}, ${item.lon.toFixed(4)}</small>`);
+                markersLayer.addLayer(marker);
+                bounds.extend([item.lat, item.lon]);
+            });
+
+            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+
+            if (categories.length > 1) {
+                legendControl = L.control({ position: 'bottomright' });
+                legendControl.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'legend');
+                    categories.forEach(cat => {
+                        const item = document.createElement('div');
+                        item.className = 'legend-item';
+                        item.innerHTML = `<span class="legend-dot" style="background:${colorMap[cat]}"></span> ${cat}`;
+                        div.appendChild(item);
+                    });
+                    return div;
+                };
+                legendControl.addTo(map);
+            }
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+        }
+
+        document.getElementById('show-btn').addEventListener('click', function () {
+            const text = document.getElementById('csv-input').value.trim();
+            if (!text) {
+                showError('Plak eerst CSV data in het invoerveld.');
+                return;
+            }
+            try {
+                const items = parseCSV(text);
+                showOnMap(items);
+                document.getElementById('error').style.display = 'none';
+            } catch (e) {
+                showError(e.message);
+            }
+        });
+
+        document.getElementById('clear-btn').addEventListener('click', function () {
+            document.getElementById('csv-input').value = '';
+            markersLayer.clearLayers();
+            if (legendControl) {
+                map.removeControl(legendControl);
+                legendControl = null;
+            }
+            map.setView([0, 0], 2);
+        });
+
+        // Auto-load from URL hash
+        if (window.location.hash) {
+            try {
+                const data = decodeURIComponent(window.location.hash.slice(1));
+                document.getElementById('csv-input').value = data;
+                const items = parseCSV(data);
+                showOnMap(items);
+            } catch (e) {
+                // Ignore invalid hash data
+            }
+        }
+    </script>
+</body>
+</html>
