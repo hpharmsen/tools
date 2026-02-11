@@ -120,9 +120,7 @@
     <header>
         <h1>CSV Map Viewer</h1>
         <div class="input-row">
-            <textarea id="csv-input" placeholder="Plak hier CSV data: naam,categorie,lat,long
-Estação Central,Bezienswaardigheid,-25.9665,32.5832
-FEIMA Markt,Markt,-25.9606,32.5892"></textarea>
+            <textarea id="csv-input" placeholder="Plak hier CSV data: naam,categorie,lat,long"></textarea>
             <div class="btn-col">
                 <button id="show-btn">Toon op kaart</button>
                 <button id="clear-btn">Wissen</button>
@@ -287,7 +285,21 @@ FEIMA Markt,Markt,-25.9606,32.5892"></textarea>
             map.setView([0, 0], 2);
         });
 
-        // Auto-load from URL hash
+        const SAMPLE_CSV = `naam,categorie,lat,long
+Estação Central dos Caminhos de Ferro,Bezienswaardigheid,-25.9697,32.5647
+Fortaleza de Maputo,Bezienswaardigheid,-25.9749,32.5705
+FEIMA Markt,Markt,-25.9684,32.5948
+Maputo Cathedral (Nossa Senhora da Conceição),Bezienswaardigheid,-25.9690,32.5750
+Tunduru Botanical Gardens,Park,-25.9716,32.5739
+Museu de História Natural,Museum,-25.9773,32.5869
+Avenida Marginal,Boulevard,-25.9500,32.6100
+O Farol,Restaurant,-25.9864,32.5595
+Costa do Sol Restaurante,Restaurant,-25.9169,32.6336
+Zambi,Restaurant,-25.9801,32.5794
+Dhow Mozambique,Restaurant,-25.9818,32.5877
+Sagres Shellfish Restaurant,Restaurant,-25.9697,32.5932`;
+
+        // Auto-load from URL hash or show sample data
         if (window.location.hash) {
             try {
                 const data = decodeURIComponent(window.location.hash.slice(1));
@@ -296,6 +308,14 @@ FEIMA Markt,Markt,-25.9606,32.5892"></textarea>
                 showOnMap(items);
             } catch (e) {
                 // Ignore invalid hash data
+            }
+        } else {
+            document.getElementById('csv-input').value = SAMPLE_CSV;
+            try {
+                const items = parseCSV(SAMPLE_CSV);
+                showOnMap(items);
+            } catch (e) {
+                // Ignore
             }
         }
     </script>
