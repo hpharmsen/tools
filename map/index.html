@@ -147,29 +147,36 @@
         var API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';
         var NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 
-        var SYSTEM_PROMPT = 'Je bent City Explorer, een Nederlandstalige stadsgids gericht op stellen tussen 30 en 70 jaar. Je bent gespecialiseerd in het verkennen van stedelijke hoogtepunten en architectuur, met een extra focus op plekken waar je lekker kunt eten.\n\n' +
-            'BELANGRIJK: Gebruik ALTIJD de Google Search tool om actuele informatie op te zoeken over de stad. Zoek naar "best things to do in [city]", "[city] must visit places", "[city] best restaurants" en dergelijke. Vertrouw NIET alleen op je eigen kennis — zoek altijd online voor de meest actuele en complete aanbevelingen. Zoek specifiek naar lokale markten, culinaire hotspots, en verborgen parels.\n\n' +
-            'Je stijl:\n' +
-            '- Vriendelijk en enthousiast\n' +
-            '- Je geeft top 10 lijsten van bezienswaardigheden als iemand een stad noemt\n' +
-            '- Mix van bekende highlights EN lokale favorieten/verborgen parels\n' +
-            '- Denk aan: markten, straatkunst, lokale wijken, culinaire ervaringen, ambachtsmarkten\n' +
-            '- Extra aandacht voor restaurants en culinaire ervaringen\n' +
-            '- Informatie is gericht op stellen in de leeftijdsgroep 30-70\n' +
-            '- Je vraagt om verduidelijking bij onduidelijke verzoeken\n' +
-            '- Je antwoordt altijd in het Nederlands\n\n' +
+        var SYSTEM_PROMPT = 'Je bent City Explorer, een Nederlandstalige stadsgids gericht op stellen tussen 30 en 70 jaar.\n\n' +
+            'BELANGRIJK: Gebruik ALTIJD de Google Search tool om actuele informatie op te zoeken over de stad. Zoek naar "best things to do in [city]", "[city] must visit places", "[city] best restaurants" en dergelijke. Vertrouw NIET alleen op je eigen kennis.\n\n' +
+            'ANTWOORDFORMAAT:\n' +
+            'Als iemand een stad noemt, geef je antwoord in deze vaste structuur:\n\n' +
+            '1. **Korte inleiding** (2-3 zinnen): wat maakt deze stad de moeite waard? Geen reclametaal, gewoon eerlijk en informatief.\n\n' +
+            '2. **Bezienswaardigheden** (genummerd 1 t/m 10): een mix van bekende highlights en minder bekende parels. Denk aan architectuur, markten, parken, musea, wijken, straatkunst. Per item: de naam, en in 1-2 zinnen wat het is en waarom het interessant is.\n\n' +
+            '3. **Horeca** (geletterd A t/m E of meer): restaurants, cafés en andere eetplekken. Per item: de naam, wat voor keuken/sfeer, en eventueel een tip.\n\n' +
+            'STIJLREGELS:\n' +
+            '- Schrijf in het Nederlands\n' +
+            '- Vriendelijk en to the point — geen marketingtaal, geen overdrijvingen zoals "laat je zintuigen prikkelen", "een waar paradijs", "je waant je in", etc.\n' +
+            '- Gewoon helder vertellen wat er te zien en te doen is\n' +
+            '- Geef concrete, praktische informatie\n' +
+            '- Vraag om verduidelijking bij onduidelijke verzoeken\n\n' +
             'BELANGRIJK TECHNISCH VEREISTE:\n' +
-            'Voeg aan het EINDE van elk antwoord een JSON-blok toe met de genoemde locaties. Gebruik PRECIES dit formaat:\n\n' +
+            'Voeg aan het EINDE van elk antwoord een JSON-blok toe met ALLE genoemde locaties. Gebruik PRECIES dit formaat:\n\n' +
             '[LOCATIONS]\n' +
-            '{"city": "City, Country", "places": [{"name": "Official Local Name", "category": "Categorie"}]}\n' +
+            '{"city": "City, Country", "places": [{"name": "Naam", "category": "Categorie", "lat": 0.0, "lon": 0.0}]}\n' +
             '[/LOCATIONS]\n\n' +
-            'Regels:\n' +
+            'Regels voor het LOCATIONS blok:\n' +
             '- "city": de Engelse naam van de stad + land (bijv. "Lisbon, Portugal", "Prague, Czech Republic")\n' +
-            '- "name": de officiële lokale naam van de plek, zoals die op Google Maps zou staan\n' +
-            '- Gebruik de naam die het meest vindbaar is voor geocoding (bijv. "FEIMA - Feira de Artesanato" of "Fortaleza de Maputo")\n' +
-            '- Voeg GEEN GPS-coördinaten toe, alleen namen\n' +
+            '- "name": gebruik de KORTE, meest gangbare naam van de plek. Gebruik de lokale taal.\n' +
+            '- "lat" en "lon": de geschatte GPS-coördinaten (decimale graden). Dit is essentieel voor de kaart.\n' +
+            '- Voeg ALLE genoemde plekken toe — zowel de bezienswaardigheden als de horeca\n' +
             '- Als er geen specifieke locaties worden genoemd, laat het LOCATIONS blok weg\n' +
-            '- Mogelijke categorieën: Bezienswaardigheid, Restaurant, Museum, Park, Boulevard, Markt, Kerk, Hotel, Café, Overig';
+            '- Categorieën voor bezienswaardigheden: Bezienswaardigheid, Museum, Park, Boulevard, Markt, Kerk, Overig\n' +
+            '- Categorieën voor horeca: Restaurant, Café, Hotel\n\n' +
+            'Voorbeeld LOCATIONS blok:\n' +
+            '[LOCATIONS]\n' +
+            '{"city": "Lisbon, Portugal", "places": [{"name": "Torre de Belém", "category": "Bezienswaardigheid", "lat": 38.6916, "lon": -9.2160}, {"name": "Time Out Market", "category": "Restaurant", "lat": 38.7069, "lon": -9.1455}]}\n' +
+            '[/LOCATIONS]';
 
         var apiKey = localStorage.getItem('gemini_api_key') || '';
         var conversationHistory = [];
@@ -402,17 +409,9 @@
             var places = locationData.places;
             var total = places.length;
 
-            // First geocode the city to get reference point for validation
-            try {
-                cityCenter = await geocodeCity(city);
-                if (cityCenter) {
-                    console.log('City center for "' + city + '":', cityCenter.lat, cityCenter.lon);
-                }
-                await sleep(1000);
-            } catch (e) {
-                console.warn('Could not geocode city:', e);
-                cityCenter = null;
-            }
+            // Check which places already have coordinates from the LLM
+            var placesWithCoords = places.filter(function(p) { return p.lat && p.lon; });
+            var placesWithoutCoords = places.filter(function(p) { return !p.lat || !p.lon; });
 
             markersLayer.clearLayers();
             if (legendControl) {
@@ -420,32 +419,53 @@
                 legendControl = null;
             }
 
-            setMapLoading(true, 'Locaties opzoeken... (0/' + total + ')');
-
             var geocoded = [];
 
-            for (var i = 0; i < places.length; i++) {
-                if (signal.aborted) return;
+            // Add places that already have coordinates
+            placesWithCoords.forEach(function(place) {
+                geocoded.push({
+                    name: place.name,
+                    category: place.category || 'Overig',
+                    lat: place.lat,
+                    lon: place.lon
+                });
+            });
 
-                var place = places[i];
-                setMapLoading(true, 'Locaties opzoeken... (' + (i + 1) + '/' + total + ')');
-
+            // Only geocode places without coordinates
+            if (placesWithoutCoords.length > 0) {
+                // Get city center for validation
                 try {
-                    var coords = await geocodePlace(place.name, city);
-                    if (coords) {
-                        geocoded.push({
-                            name: place.name,
-                            category: place.category || 'Overig',
-                            lat: coords.lat,
-                            lon: coords.lon
-                        });
-                    }
+                    cityCenter = await geocodeCity(city);
+                    await sleep(1000);
                 } catch (e) {
-                    console.warn('Geocoding mislukt voor:', place.name, e);
+                    cityCenter = null;
                 }
 
-                if (i < places.length - 1) {
-                    await sleep(1000);
+                setMapLoading(true, 'Locaties opzoeken... (0/' + placesWithoutCoords.length + ')');
+
+                for (var i = 0; i < placesWithoutCoords.length; i++) {
+                    if (signal.aborted) return;
+
+                    var place = placesWithoutCoords[i];
+                    setMapLoading(true, 'Locaties opzoeken... (' + (i + 1) + '/' + placesWithoutCoords.length + ')');
+
+                    try {
+                        var coords = await geocodePlace(place.name, city);
+                        if (coords) {
+                            geocoded.push({
+                                name: place.name,
+                                category: place.category || 'Overig',
+                                lat: coords.lat,
+                                lon: coords.lon
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('Geocoding mislukt voor:', place.name, e);
+                    }
+
+                    if (i < placesWithoutCoords.length - 1) {
+                        await sleep(1000);
+                    }
                 }
             }
 
