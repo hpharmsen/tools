@@ -76,9 +76,9 @@
         .map-loading .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #4a90d9; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .legend { background: white; padding: 10px 14px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); line-height: 1.8; font-size: 13px; }
+        .legend { background: white; padding: 10px 14px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); line-height: 1.8; font-size: 12px; max-height: 45vh; overflow-y: auto; }
         .legend-item { display: flex; align-items: center; gap: 6px; }
-        .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
+        .legend-dot { width: 18px; height: 18px; min-width: 18px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
 
         @media (max-width: 768px) {
             .mobile-tabs { display: flex; }
@@ -458,16 +458,23 @@
 
         // --- Map display ---
 
-        function createCircleIcon(color) {
+        var HORECA_CATEGORIES = ['Restaurant', 'Café', 'Hotel'];
+
+        function isHoreca(category) {
+            return HORECA_CATEGORIES.indexOf(category) !== -1;
+        }
+
+        function createLabelIcon(color, label) {
+            var fontSize = label.length > 1 ? '10' : '12';
             return L.divIcon({
-                html: '<svg width="24" height="36" viewBox="0 0 24 36">' +
-                    '<path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
-                    '<circle cx="12" cy="11" r="5" fill="#fff"/>' +
+                html: '<svg width="28" height="40" viewBox="0 0 28 40">' +
+                    '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
+                    '<text x="14" y="16" text-anchor="middle" fill="#fff" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="' + fontSize + '" font-weight="700">' + label + '</text>' +
                     '</svg>',
                 className: '',
-                iconSize: [24, 36],
-                iconAnchor: [12, 36],
-                popupAnchor: [0, -30]
+                iconSize: [28, 40],
+                iconAnchor: [14, 40],
+                popupAnchor: [0, -34]
             });
         }
 
@@ -480,6 +487,20 @@
 
             if (locations.length === 0) return;
 
+            // Assign labels: 1,2,3... for highlights, A,B,C... for horeca
+            var highlightNum = 1;
+            var horecaNum = 0; // 0=A, 1=B, etc.
+
+            locations.forEach(function(loc) {
+                if (isHoreca(loc.category)) {
+                    loc.label = String.fromCharCode(65 + horecaNum); // A, B, C...
+                    horecaNum++;
+                } else {
+                    loc.label = String(highlightNum);
+                    highlightNum++;
+                }
+            });
+
             var categories = [];
             locations.forEach(function(l) {
                 if (categories.indexOf(l.category) === -1) categories.push(l.category);
@@ -489,30 +510,30 @@
 
             locations.forEach(function(loc) {
                 var color = CATEGORY_COLORS[loc.category] || CATEGORY_COLORS['Overig'];
-                var icon = createCircleIcon(color);
+                var icon = createLabelIcon(color, loc.label);
                 var marker = L.marker([loc.lat, loc.lon], { icon: icon });
-                marker.bindPopup('<strong>' + loc.name + '</strong><br><em>' + loc.category + '</em>');
+                marker.bindPopup('<strong>' + loc.label + '. ' + loc.name + '</strong><br><em>' + loc.category + '</em>');
                 markersLayer.addLayer(marker);
                 bounds.extend([loc.lat, loc.lon]);
             });
 
             map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
 
-            if (categories.length > 1) {
-                legendControl = L.control({ position: 'bottomright' });
-                legendControl.onAdd = function() {
-                    var div = L.DomUtil.create('div', 'legend');
-                    categories.forEach(function(cat) {
-                        var item = document.createElement('div');
-                        item.className = 'legend-item';
-                        var c = CATEGORY_COLORS[cat] || CATEGORY_COLORS['Overig'];
-                        item.innerHTML = '<span class="legend-dot" style="background:' + c + '"></span> ' + cat;
-                        div.appendChild(item);
-                    });
-                    return div;
-                };
-                legendControl.addTo(map);
-            }
+            legendControl = L.control({ position: 'bottomright' });
+            legendControl.onAdd = function() {
+                var div = L.DomUtil.create('div', 'legend');
+                locations.forEach(function(loc) {
+                    var item = document.createElement('div');
+                    item.className = 'legend-item';
+                    var c = CATEGORY_COLORS[loc.category] || CATEGORY_COLORS['Overig'];
+                    item.innerHTML = '<span class="legend-dot" style="background:' + c + '">' +
+                        '<span style="color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;height:100%">' + loc.label + '</span>' +
+                        '</span> ' + loc.name;
+                    div.appendChild(item);
+                });
+                return div;
+            };
+            legendControl.addTo(map);
         }
 
         // --- Gemini API ---
