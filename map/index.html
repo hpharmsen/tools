@@ -185,6 +185,7 @@
         var useGoogleSearch = true;
         var geocodeAbortController = null;
         var activeTab = 'chat';
+        var pendingBounds = null;
 
         // Map setup
         var map = L.map('map').setView([48.8, 10], 4);
@@ -220,7 +221,13 @@
                 document.body.classList.add('show-map');
                 document.getElementById('map-badge').style.display = 'none';
                 // Leaflet must recalculate size when container becomes visible
-                setTimeout(function() { map.invalidateSize(); }, 50);
+                setTimeout(function() {
+                    map.invalidateSize();
+                    if (pendingBounds) {
+                        map.fitBounds(pendingBounds, { padding: [50, 50], maxZoom: 14 });
+                        pendingBounds = null;
+                    }
+                }, 100);
             } else {
                 document.body.classList.remove('show-map');
             }
@@ -474,7 +481,6 @@
             if (signal.aborted) return;
 
             setMapLoading(false);
-            alert('showOnMap: ' + geocoded.length + ' locaties\n' + geocoded.slice(0, 3).map(function(g) { return g.name + ' (' + g.lat + ',' + g.lon + ')'; }).join('\n'));
             showOnMap(geocoded);
             notifyMapReady();
         }
@@ -554,20 +560,18 @@
             };
             legendControl.addTo(map);
 
-            // Fit map to markers using manually computed bounds
+            // Fit map to markers
             var latlngs = locations.map(function(loc) { return L.latLng(loc.lat, loc.lon); });
             var bounds = L.latLngBounds(latlngs);
-            var mapSize = map.getSize();
-            alert('fitBounds:\n' + locations.length + ' locations\nbounds: ' + bounds.toBBoxString() + '\nbounds valid: ' + bounds.isValid() + '\nmap container size: ' + mapSize.x + 'x' + mapSize.y);
             map.invalidateSize();
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-            setTimeout(function() {
-                map.invalidateSize();
-                var newSize = map.getSize();
+            var size = map.getSize();
+            if (size.x > 0 && size.y > 0) {
+                // Map is visible (desktop or map tab active) — zoom now
                 map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-                var c = map.getCenter();
-                alert('Na fitBounds retry:\nmap size: ' + newSize.x + 'x' + newSize.y + '\ncenter: ' + c.lat.toFixed(4) + ',' + c.lng.toFixed(4) + '\nzoom: ' + map.getZoom());
-            }, 300);
+            } else {
+                // Map is hidden (mobile chat tab) — save for later
+                pendingBounds = bounds;
+            }
         }
 
         // --- Gemini API ---
@@ -637,12 +641,6 @@
                 conversationHistory.push({ role: 'model', parts: [{ text: fullText }] });
 
                 var locationData = extractLocations(fullText);
-                var dbg = 'extractLocations: ' + (locationData ? locationData.places.length + ' places, city: ' + locationData.city : 'NULL (geen [LOCATIONS] blok gevonden)');
-                if (locationData && locationData.places[0]) {
-                    var p0 = locationData.places[0];
-                    dbg += '\n\nEerste plaats: ' + p0.name + '\nlat=' + p0.lat + ' (' + typeof p0.lat + '), lon=' + p0.lon + ' (' + typeof p0.lon + ')';
-                }
-                alert(dbg);
                 var displayText = cleanResponseText(fullText);
 
                 hideTyping();
