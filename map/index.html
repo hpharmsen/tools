@@ -528,23 +528,15 @@
                 if (categories.indexOf(l.category) === -1) categories.push(l.category);
             });
 
-            var latlngs = [];
-
             locations.forEach(function(loc) {
                 var color = CATEGORY_COLORS[loc.category] || CATEGORY_COLORS['Overig'];
                 var icon = createLabelIcon(color, loc.label);
                 var marker = L.marker([loc.lat, loc.lon], { icon: icon });
                 marker.bindPopup('<strong>' + loc.label + '. ' + loc.name + '</strong><br><em>' + loc.category + '</em>');
                 markersLayer.addLayer(marker);
-                latlngs.push([loc.lat, loc.lon]);
             });
 
-            var bounds = L.latLngBounds(latlngs);
-            map.invalidateSize();
-            setTimeout(function() {
-                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-            }, 100);
-
+            // Add legend before fitting bounds so map accounts for control space
             legendControl = L.control({ position: 'bottomright' });
             legendControl.onAdd = function() {
                 var div = L.DomUtil.create('div', 'legend');
@@ -560,6 +552,17 @@
                 return div;
             };
             legendControl.addTo(map);
+
+            // Fit map to markers — retry to handle layout timing issues
+            function fitMapToMarkers() {
+                map.invalidateSize();
+                var b = markersLayer.getBounds();
+                if (b.isValid()) {
+                    map.fitBounds(b, { padding: [50, 50], maxZoom: 14 });
+                }
+            }
+            fitMapToMarkers();
+            setTimeout(fitMapToMarkers, 300);
         }
 
         // --- Gemini API ---
