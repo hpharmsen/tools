@@ -528,7 +528,7 @@
                 if (categories.indexOf(l.category) === -1) categories.push(l.category);
             });
 
-            var bounds = L.latLngBounds();
+            var latlngs = [];
 
             locations.forEach(function(loc) {
                 var color = CATEGORY_COLORS[loc.category] || CATEGORY_COLORS['Overig'];
@@ -536,11 +536,14 @@
                 var marker = L.marker([loc.lat, loc.lon], { icon: icon });
                 marker.bindPopup('<strong>' + loc.label + '. ' + loc.name + '</strong><br><em>' + loc.category + '</em>');
                 markersLayer.addLayer(marker);
-                bounds.extend([loc.lat, loc.lon]);
+                latlngs.push([loc.lat, loc.lon]);
             });
 
+            var bounds = L.latLngBounds(latlngs);
             map.invalidateSize();
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+            setTimeout(function() {
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+            }, 100);
 
             legendControl = L.control({ position: 'bottomright' });
             legendControl.onAdd = function() {
