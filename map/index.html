@@ -76,8 +76,8 @@
         .map-loading .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #4a90d9; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .legend { background: white; padding: 10px 14px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); line-height: 1.8; font-size: 12px; max-height: 45vh; overflow-y: auto; }
-        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend { background: white; padding: 10px 14px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); line-height: 1.8; font-size: 12px; max-height: 45vh; overflow-y: auto; column-count: 2; column-gap: 16px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; break-inside: avoid; }
         .legend-dot { width: 18px; height: 18px; min-width: 18px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
 
         @media (max-width: 768px) {
@@ -153,7 +153,9 @@
             'Als iemand een stad noemt, geef je antwoord in deze vaste structuur:\n\n' +
             '1. **Korte inleiding** (2-3 zinnen): wat maakt deze stad de moeite waard? Geen reclametaal, gewoon eerlijk en informatief.\n\n' +
             '2. **Bezienswaardigheden** (genummerd 1 t/m 10): een mix van bekende highlights en minder bekende parels. Denk aan architectuur, markten, parken, musea, wijken, straatkunst. Per item: de naam, en in 1-2 zinnen wat het is en waarom het interessant is.\n\n' +
-            '3. **Horeca** (geletterd A t/m E of meer): restaurants, cafés en andere eetplekken. Per item: de naam, wat voor keuken/sfeer, en eventueel een tip.\n\n' +
+            '3. **Horeca** (geletterd A t/m E of meer): restaurants, cafés en andere eetplekken. Gebruik markdown-opsommingstekens (elk item op een eigen regel, voorafgegaan door een streepje). Per item: de letter vetgedrukt, de naam, wat voor keuken/sfeer, en eventueel een tip. Voorbeeld:\n' +
+            '- **A.** Naam — beschrijving\n' +
+            '- **B.** Naam — beschrijving\n\n' +
             'STIJLREGELS:\n' +
             '- Schrijf in het Nederlands\n' +
             '- Vriendelijk en to the point — geen marketingtaal, geen overdrijvingen zoals "laat je zintuigen prikkelen", "een waar paradijs", "je waant je in", etc.\n' +
@@ -537,6 +539,7 @@
                 bounds.extend([loc.lat, loc.lon]);
             });
 
+            map.invalidateSize();
             map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
 
             legendControl = L.control({ position: 'bottomright' });
