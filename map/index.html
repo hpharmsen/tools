@@ -487,16 +487,16 @@
         }
 
         function createLabelIcon(color, label) {
-            var fontSize = label.length > 1 ? '10' : '12';
+            var fontSize = label.length > 1 ? '8' : '10';
             return L.divIcon({
-                html: '<svg width="28" height="40" viewBox="0 0 28 40">' +
-                    '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
-                    '<text x="14" y="16" text-anchor="middle" fill="#fff" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="' + fontSize + '" font-weight="700">' + label + '</text>' +
+                html: '<svg width="22" height="32" viewBox="0 0 22 32">' +
+                    '<path d="M11 0C4.9 0 0 4.9 0 11c0 8.3 11 21 11 21s11-12.7 11-21C22 4.9 17.1 0 11 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
+                    '<text x="11" y="13" text-anchor="middle" fill="#fff" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="' + fontSize + '" font-weight="700">' + label + '</text>' +
                     '</svg>',
                 className: '',
-                iconSize: [28, 40],
-                iconAnchor: [14, 40],
-                popupAnchor: [0, -34]
+                iconSize: [22, 32],
+                iconAnchor: [11, 32],
+                popupAnchor: [0, -28]
             });
         }
 
@@ -540,7 +540,7 @@
             });
 
             map.invalidateSize();
-            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
 
             legendControl = L.control({ position: 'bottomright' });
             legendControl.onAdd = function() {
