@@ -474,7 +474,7 @@
             if (signal.aborted) return;
 
             setMapLoading(false);
-            console.log('geocodeAndShowLocations: showing', geocoded.length, 'locations on map', JSON.stringify(geocoded.map(function(g) { return { name: g.name, lat: g.lat, lon: g.lon }; })));
+            alert('showOnMap: ' + geocoded.length + ' locaties\n' + geocoded.slice(0, 3).map(function(g) { return g.name + ' (' + g.lat + ',' + g.lon + ')'; }).join('\n'));
             showOnMap(geocoded);
             notifyMapReady();
         }
@@ -557,13 +557,16 @@
             // Fit map to markers using manually computed bounds
             var latlngs = locations.map(function(loc) { return L.latLng(loc.lat, loc.lon); });
             var bounds = L.latLngBounds(latlngs);
-            console.log('fitBounds called with', locations.length, 'locations, bounds:', bounds.toBBoxString());
+            var mapSize = map.getSize();
+            alert('fitBounds:\n' + locations.length + ' locations\nbounds: ' + bounds.toBBoxString() + '\nbounds valid: ' + bounds.isValid() + '\nmap container size: ' + mapSize.x + 'x' + mapSize.y);
             map.invalidateSize();
             map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
             setTimeout(function() {
                 map.invalidateSize();
+                var newSize = map.getSize();
                 map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-                console.log('fitBounds retried, map center:', map.getCenter(), 'zoom:', map.getZoom());
+                var c = map.getCenter();
+                alert('Na fitBounds retry:\nmap size: ' + newSize.x + 'x' + newSize.y + '\ncenter: ' + c.lat.toFixed(4) + ',' + c.lng.toFixed(4) + '\nzoom: ' + map.getZoom());
             }, 300);
         }
 
@@ -634,10 +637,12 @@
                 conversationHistory.push({ role: 'model', parts: [{ text: fullText }] });
 
                 var locationData = extractLocations(fullText);
-                console.log('extractLocations result:', locationData ? locationData.places.length + ' places, city: ' + locationData.city : 'null');
-                if (locationData) {
-                    console.log('First place:', JSON.stringify(locationData.places[0]));
+                var dbg = 'extractLocations: ' + (locationData ? locationData.places.length + ' places, city: ' + locationData.city : 'NULL (geen [LOCATIONS] blok gevonden)');
+                if (locationData && locationData.places[0]) {
+                    var p0 = locationData.places[0];
+                    dbg += '\n\nEerste plaats: ' + p0.name + '\nlat=' + p0.lat + ' (' + typeof p0.lat + '), lon=' + p0.lon + ' (' + typeof p0.lon + ')';
                 }
+                alert(dbg);
                 var displayText = cleanResponseText(fullText);
 
                 hideTyping();
