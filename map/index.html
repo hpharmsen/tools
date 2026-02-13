@@ -193,7 +193,7 @@
             maxZoom: 19
         }).addTo(map);
 
-        var markersLayer = L.layerGroup().addTo(map);
+        var markersLayer = L.featureGroup().addTo(map);
         var legendControl = null;
 
         var CATEGORY_COLORS = {
