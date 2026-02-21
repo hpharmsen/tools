@@ -191,16 +191,18 @@
         var legendControl = null;
 
         var CATEGORY_COLORS = {
+            // Bezienswaardigheden: koele/gedekte tinten
             'Bezienswaardigheid': '#e74c3c',
-            'Restaurant': '#f39c12',
             'Museum': '#9b59b6',
             'Park': '#2ecc71',
             'Boulevard': '#3498db',
             'Markt': '#e67e22',
             'Kerk': '#34495e',
-            'Hotel': '#1abc9c',
-            'Café': '#d35400',
-            'Overig': '#95a5a6'
+            'Overig': '#95a5a6',
+            // Horeca: warme/felle eigen tinten
+            'Restaurant': '#F1C40F',
+            'Café': '#E91E63',
+            'Hotel': '#00BCD4'
         };
 
         // --- Tabs ---
@@ -500,12 +502,21 @@
             return HORECA_CATEGORIES.indexOf(category) !== -1;
         }
 
+        function textColorForBg(hex) {
+            var r = parseInt(hex.substr(1,2), 16);
+            var g = parseInt(hex.substr(3,2), 16);
+            var b = parseInt(hex.substr(5,2), 16);
+            // Perceived luminance
+            return (r * 0.299 + g * 0.587 + b * 0.114) > 160 ? '#333' : '#fff';
+        }
+
         function createLabelIcon(color, label) {
             var fontSize = label.length > 1 ? '10' : '12';
+            var textColor = textColorForBg(color);
             return L.divIcon({
                 html: '<svg width="28" height="40" viewBox="0 0 28 40">' +
                     '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
-                    '<text x="14" y="16" text-anchor="middle" fill="#fff" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="' + fontSize + '" font-weight="700">' + label + '</text>' +
+                    '<text x="14" y="16" text-anchor="middle" fill="' + textColor + '" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="' + fontSize + '" font-weight="700">' + label + '</text>' +
                     '</svg>',
                 className: '',
                 iconSize: [28, 40],
