@@ -353,7 +353,7 @@
         }
 
         function pickClosest(results) {
-            if (!results || results.length === 0) return null;
+            if (!Array.isArray(results) || results.length === 0) return null;
             if (!cityCenter) {
                 return { lat: parseFloat(results[0].lat), lon: parseFloat(results[0].lon) };
             }
@@ -362,6 +362,7 @@
             for (var i = 0; i < results.length; i++) {
                 var lat = parseFloat(results[i].lat);
                 var lon = parseFloat(results[i].lon);
+                if (isNaN(lat) || isNaN(lon)) continue;
                 var d = distanceKm(cityCenter.lat, cityCenter.lon, lat, lon);
                 if (d < bestDist) {
                     bestDist = d;
@@ -374,12 +375,11 @@
 
         function viewboxParam() {
             if (!cityCenter) return '';
-            var d = 0.5; // ~50km box
-            return '&viewbox=' + (cityCenter.lon - d) + ',' + (cityCenter.lat + d) + ',' + (cityCenter.lon + d) + ',' + (cityCenter.lat - d) + '&bounded=1';
+            var d = 0.5; // ~50km bias box (no bounded=1, just preference)
+            return '&viewbox=' + (cityCenter.lon - d) + ',' + (cityCenter.lat + d) + ',' + (cityCenter.lon + d) + ',' + (cityCenter.lat - d);
         }
 
         function simplifyName(name) {
-            // Remove parenthetical content, strip quotes/dashes
             return name.replace(/\s*\(.*?\)/g, '').replace(/["']/g, '').replace(/\s*[-–—]\s*.+$/, '').trim();
         }
 
@@ -387,37 +387,35 @@
             var url = NOMINATIM_URL + '?q=' + encodeURIComponent(query) + '&format=json&limit=5&accept-language=nl';
             if (useViewbox && cityCenter) url += viewboxParam();
             var resp = await fetch(url);
-            return resp.json();
+            if (!resp.ok) {
+                console.warn('Nominatim HTTP ' + resp.status + ' for: ' + query);
+                return [];
+            }
+            var data = await resp.json();
+            return Array.isArray(data) ? data : [];
         }
 
         async function geocodePlace(name, city) {
-            // Strategy 1: "name, city" with viewbox
+            // Strategy 1: "name, city" with viewbox bias
             var results = await tryGeocode(name + ', ' + city, true);
             var coords = pickClosest(results);
             if (coords) return coords;
 
-            await sleep(1000);
+            await sleep(1100);
 
-            // Strategy 2: "name, city" without viewbox (wider search)
-            results = await tryGeocode(name + ', ' + city, false);
-            coords = pickClosest(results);
-            if (coords) return coords;
-
-            await sleep(1000);
-
-            // Strategy 3: simplified name + city
-            var simple = simplifyName(name);
-            if (simple !== name) {
-                results = await tryGeocode(simple + ', ' + city, false);
-                coords = pickClosest(results);
-                if (coords) return coords;
-                await sleep(1000);
-            }
-
-            // Strategy 4: just the name, pick closest to city
+            // Strategy 2: just the name, pick closest to city
             results = await tryGeocode(name, false);
             coords = pickClosest(results);
             if (coords) return coords;
+
+            // Strategy 3: simplified name + city (only if name was complex)
+            var simple = simplifyName(name);
+            if (simple !== name && simple.length > 2) {
+                await sleep(1100);
+                results = await tryGeocode(simple + ', ' + city, true);
+                coords = pickClosest(results);
+                if (coords) return coords;
+            }
 
             return null;
         }
@@ -441,7 +439,7 @@
                 if (cityCenter) {
                     console.log('City center for "' + city + '":', cityCenter.lat, cityCenter.lon);
                 }
-                await sleep(1000);
+                await sleep(1100);
             } catch (e) {
                 console.warn('Could not geocode city:', e);
                 cityCenter = null;
@@ -461,7 +459,7 @@
                 if (signal.aborted) return;
 
                 var place = places[i];
-                setMapLoading(true, 'Locaties opzoeken... (' + (i + 1) + '/' + total + ')');
+                setMapLoading(true, place.name + ' (' + (i + 1) + '/' + total + ')');
 
                 try {
                     var coords = await geocodePlace(place.name, city);
@@ -472,6 +470,8 @@
                             lat: coords.lat,
                             lon: coords.lon
                         });
+                        // Show markers progressively
+                        showOnMap(geocoded);
                     } else {
                         console.warn('Niet gevonden:', place.name);
                     }
@@ -481,7 +481,7 @@
 
                 // Sleep between places (geocodePlace already sleeps between retries)
                 if (i < places.length - 1) {
-                    await sleep(1000);
+                    await sleep(1100);
                 }
             }
 
