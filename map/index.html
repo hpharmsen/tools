@@ -163,20 +163,16 @@
             'BELANGRIJK TECHNISCH VEREISTE:\n' +
             'Voeg aan het EINDE van elk antwoord een JSON-blok toe met ALLE genoemde locaties. Gebruik PRECIES dit formaat:\n\n' +
             '[LOCATIONS]\n' +
-            '{"city": "City, Country", "places": [{"name": "Naam", "category": "Categorie", "lat": 0.0, "lon": 0.0}]}\n' +
+            '{"city": "City, Country", "places": [{"name": "Naam", "category": "Categorie"}]}\n' +
             '[/LOCATIONS]\n\n' +
             'Regels voor het LOCATIONS blok:\n' +
             '- "city": de Engelse naam van de stad + land (bijv. "Lisbon, Portugal", "Prague, Czech Republic")\n' +
-            '- "name": gebruik de KORTE, meest gangbare naam van de plek. Gebruik de lokale taal.\n' +
-            '- "lat" en "lon": de geschatte GPS-coördinaten (decimale graden). Dit is essentieel voor de kaart.\n' +
+            '- "name": gebruik de KORTE, meest gangbare naam van de plek zoals die op Google Maps staat. Geen lange officiële namen. Gebruik de lokale taal.\n' +
             '- Voeg ALLE genoemde plekken toe — zowel de bezienswaardigheden als de horeca\n' +
+            '- Voeg GEEN GPS-coördinaten toe, alleen namen\n' +
             '- Als er geen specifieke locaties worden genoemd, laat het LOCATIONS blok weg\n' +
             '- Categorieën voor bezienswaardigheden: Bezienswaardigheid, Museum, Park, Boulevard, Markt, Kerk, Overig\n' +
-            '- Categorieën voor horeca: Restaurant, Café, Hotel\n\n' +
-            'Voorbeeld LOCATIONS blok:\n' +
-            '[LOCATIONS]\n' +
-            '{"city": "Lisbon, Portugal", "places": [{"name": "Torre de Belém", "category": "Bezienswaardigheid", "lat": 38.6916, "lon": -9.2160}, {"name": "Time Out Market", "category": "Restaurant", "lat": 38.7069, "lon": -9.1455}]}\n' +
-            '[/LOCATIONS]';
+            '- Categorieën voor horeca: Restaurant, Café, Hotel';
 
         var apiKey = localStorage.getItem('gemini_api_key') || '';
         var conversationHistory = [];
@@ -356,42 +352,72 @@
             return null;
         }
 
-        async function geocodePlace(name, city) {
-            var query = name + ', ' + city;
-            var url = NOMINATIM_URL + '?q=' + encodeURIComponent(query) + '&format=json&limit=1&accept-language=nl';
+        function pickClosest(results) {
+            if (!results || results.length === 0) return null;
+            if (!cityCenter) {
+                return { lat: parseFloat(results[0].lat), lon: parseFloat(results[0].lon) };
+            }
+            var best = null;
+            var bestDist = Infinity;
+            for (var i = 0; i < results.length; i++) {
+                var lat = parseFloat(results[i].lat);
+                var lon = parseFloat(results[i].lon);
+                var d = distanceKm(cityCenter.lat, cityCenter.lon, lat, lon);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = { lat: lat, lon: lon };
+                }
+            }
+            if (bestDist < MAX_DISTANCE_KM) return best;
+            return null;
+        }
+
+        function viewboxParam() {
+            if (!cityCenter) return '';
+            var d = 0.5; // ~50km box
+            return '&viewbox=' + (cityCenter.lon - d) + ',' + (cityCenter.lat + d) + ',' + (cityCenter.lon + d) + ',' + (cityCenter.lat - d) + '&bounded=1';
+        }
+
+        function simplifyName(name) {
+            // Remove parenthetical content, strip quotes/dashes
+            return name.replace(/\s*\(.*?\)/g, '').replace(/["']/g, '').replace(/\s*[-–—]\s*.+$/, '').trim();
+        }
+
+        async function tryGeocode(query, useViewbox) {
+            var url = NOMINATIM_URL + '?q=' + encodeURIComponent(query) + '&format=json&limit=5&accept-language=nl';
+            if (useViewbox && cityCenter) url += viewboxParam();
             var resp = await fetch(url);
-            var results = await resp.json();
+            return resp.json();
+        }
 
-            if (results.length > 0) {
-                var lat = parseFloat(results[0].lat);
-                var lon = parseFloat(results[0].lon);
-                if (cityCenter && distanceKm(cityCenter.lat, cityCenter.lon, lat, lon) < MAX_DISTANCE_KM) {
-                    return { lat: lat, lon: lon };
-                }
-                // If too far from city center, this is likely a wrong match — skip fallback
-                if (cityCenter && distanceKm(cityCenter.lat, cityCenter.lon, lat, lon) >= MAX_DISTANCE_KM) {
-                    console.warn('Geocode result for "' + name + '" too far from city (' +
-                        Math.round(distanceKm(cityCenter.lat, cityCenter.lon, lat, lon)) + ' km), skipping');
-                    return null;
-                }
-                return { lat: lat, lon: lon };
+        async function geocodePlace(name, city) {
+            // Strategy 1: "name, city" with viewbox
+            var results = await tryGeocode(name + ', ' + city, true);
+            var coords = pickClosest(results);
+            if (coords) return coords;
+
+            await sleep(1000);
+
+            // Strategy 2: "name, city" without viewbox (wider search)
+            results = await tryGeocode(name + ', ' + city, false);
+            coords = pickClosest(results);
+            if (coords) return coords;
+
+            await sleep(1000);
+
+            // Strategy 3: simplified name + city
+            var simple = simplifyName(name);
+            if (simple !== name) {
+                results = await tryGeocode(simple + ', ' + city, false);
+                coords = pickClosest(results);
+                if (coords) return coords;
+                await sleep(1000);
             }
 
-            // Fallback: search without city, but still validate distance
-            url = NOMINATIM_URL + '?q=' + encodeURIComponent(name) + '&format=json&limit=1';
-            resp = await fetch(url);
-            results = await resp.json();
-
-            if (results.length > 0) {
-                var lat = parseFloat(results[0].lat);
-                var lon = parseFloat(results[0].lon);
-                if (cityCenter && distanceKm(cityCenter.lat, cityCenter.lon, lat, lon) >= MAX_DISTANCE_KM) {
-                    console.warn('Fallback geocode for "' + name + '" too far from city (' +
-                        Math.round(distanceKm(cityCenter.lat, cityCenter.lon, lat, lon)) + ' km), skipping');
-                    return null;
-                }
-                return { lat: lat, lon: lon };
-            }
+            // Strategy 4: just the name, pick closest to city
+            results = await tryGeocode(name, false);
+            coords = pickClosest(results);
+            if (coords) return coords;
 
             return null;
         }
@@ -409,9 +435,17 @@
             var places = locationData.places;
             var total = places.length;
 
-            // Check which places already have coordinates from the LLM
-            var placesWithCoords = places.filter(function(p) { return p.lat && p.lon; });
-            var placesWithoutCoords = places.filter(function(p) { return !p.lat || !p.lon; });
+            // First geocode the city to get reference point for validation
+            try {
+                cityCenter = await geocodeCity(city);
+                if (cityCenter) {
+                    console.log('City center for "' + city + '":', cityCenter.lat, cityCenter.lon);
+                }
+                await sleep(1000);
+            } catch (e) {
+                console.warn('Could not geocode city:', e);
+                cityCenter = null;
+            }
 
             markersLayer.clearLayers();
             if (legendControl) {
@@ -419,53 +453,35 @@
                 legendControl = null;
             }
 
+            setMapLoading(true, 'Locaties opzoeken... (0/' + total + ')');
+
             var geocoded = [];
 
-            // Add places that already have coordinates
-            placesWithCoords.forEach(function(place) {
-                geocoded.push({
-                    name: place.name,
-                    category: place.category || 'Overig',
-                    lat: place.lat,
-                    lon: place.lon
-                });
-            });
+            for (var i = 0; i < places.length; i++) {
+                if (signal.aborted) return;
 
-            // Only geocode places without coordinates
-            if (placesWithoutCoords.length > 0) {
-                // Get city center for validation
+                var place = places[i];
+                setMapLoading(true, 'Locaties opzoeken... (' + (i + 1) + '/' + total + ')');
+
                 try {
-                    cityCenter = await geocodeCity(city);
-                    await sleep(1000);
+                    var coords = await geocodePlace(place.name, city);
+                    if (coords) {
+                        geocoded.push({
+                            name: place.name,
+                            category: place.category || 'Overig',
+                            lat: coords.lat,
+                            lon: coords.lon
+                        });
+                    } else {
+                        console.warn('Niet gevonden:', place.name);
+                    }
                 } catch (e) {
-                    cityCenter = null;
+                    console.warn('Geocoding mislukt voor:', place.name, e);
                 }
 
-                setMapLoading(true, 'Locaties opzoeken... (0/' + placesWithoutCoords.length + ')');
-
-                for (var i = 0; i < placesWithoutCoords.length; i++) {
-                    if (signal.aborted) return;
-
-                    var place = placesWithoutCoords[i];
-                    setMapLoading(true, 'Locaties opzoeken... (' + (i + 1) + '/' + placesWithoutCoords.length + ')');
-
-                    try {
-                        var coords = await geocodePlace(place.name, city);
-                        if (coords) {
-                            geocoded.push({
-                                name: place.name,
-                                category: place.category || 'Overig',
-                                lat: coords.lat,
-                                lon: coords.lon
-                            });
-                        }
-                    } catch (e) {
-                        console.warn('Geocoding mislukt voor:', place.name, e);
-                    }
-
-                    if (i < placesWithoutCoords.length - 1) {
-                        await sleep(1000);
-                    }
+                // Sleep between places (geocodePlace already sleeps between retries)
+                if (i < places.length - 1) {
+                    await sleep(1000);
                 }
             }
 
