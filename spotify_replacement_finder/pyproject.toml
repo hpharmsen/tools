@@ -1,0 +1,16 @@
+[project]
+name = 'spotify-replacement-finder'
+version = '0.1.0'
+description = 'Replace unavailable Spotify playlist tracks automatically'
+requires-python = '>=3.13'
+dependencies = [
+    'spotipy>=2.24',
+    'python-dotenv>=1.0',
+    'justlog @ git+https://github.com/hpharmsen/justlog.git',
+]
+
+[tool.ruff]
+line-length = 100
+
+[dependency-groups]
+dev = ['ruff>=0.14', 'pytest>=8']
