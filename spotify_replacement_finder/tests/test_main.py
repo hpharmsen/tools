@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from main import extract_playlist_id, find_playlist_by_name, needs_replacement, find_replacement
+from main import extract_playlist_id, find_playlist_by_name, needs_replacement, find_replacement, get_track
 
 MARKET = 'NL'
 
@@ -73,6 +73,23 @@ def test_find_playlist_by_name_paginated():
     sp.current_user_playlists.return_value = page1
     sp.next.side_effect = [page2, None]
     assert find_playlist_by_name(sp, 'Target') == 'target_id'
+
+
+# --- get_track ---
+
+def test_get_track_uses_track_field():
+    item = {'track': {'id': '1'}, 'item': {'id': '2'}}
+    assert get_track(item)['id'] == '1'
+
+
+def test_get_track_falls_back_to_item_field():
+    item = {'track': None, 'item': {'id': '2'}}
+    assert get_track(item)['id'] == '2'
+
+
+def test_get_track_local_file_uses_item_field():
+    item = {'is_local': True, 'track': None, 'item': {'id': None, 'name': 'Song', 'type': 'track'}}
+    assert get_track(item)['name'] == 'Song'
 
 
 # --- needs_replacement ---

@@ -59,6 +59,11 @@ def build_client() -> spotipy.Spotify:
     ))
 
 
+def get_track(item: dict) -> dict | None:
+    # Spotify API uses 'track' for streams and 'item' for local files / newer API format
+    return item.get('track') or item.get('item')
+
+
 def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dict]:
     # No market param: ensures local file track objects are populated (market=X makes them null)
     items = []
@@ -70,7 +75,7 @@ def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dict]:
 
 
 def needs_replacement(item: dict, user_country: str) -> bool:
-    track = item.get('track')
+    track = get_track(item)
     if not track:
         return False
     if track.get('type') == 'episode':
@@ -90,16 +95,30 @@ def needs_replacement(item: dict, user_country: str) -> bool:
     return False
 
 
+def _normalize(name: str) -> str:
+    return re.sub(r'[^\w\s]', '', name).lower().strip()
+
+
 def find_replacement(sp: spotipy.Spotify, title: str, artist: str, original_id: str | None, market: str) -> dict | None:
-    q = f'track:"{title}" artist:"{artist}"'
+    # For filename-style local files: "Bing Crosby - White Christmas.mp3" with empty artist
+    clean_title = re.sub(r'\.\w{2,4}$', '', title)  # strip extension
+    if not artist and ' - ' in clean_title:
+        artist, clean_title = [p.strip() for p in clean_title.split(' - ', 1)]
+
+    q = f'track:"{clean_title}" artist:"{artist}"' if artist else f'track:"{clean_title}"'
     results = sp.search(q=q, type='track', market=market, limit=10)
+
+    def artist_matches(t: dict) -> bool:
+        candidate = _normalize(t['artists'][0]['name'])
+        return not artist or candidate == _normalize(artist) or _normalize(artist) in candidate
+
     candidates = [
         t for t in results['tracks']['items']
         if t.get('id') != original_id
         and t.get('is_playable', True)
-        and t['artists'][0]['name'].lower() == artist.lower()
+        and artist_matches(t)
     ]
-    return max(candidates, key=lambda t: t['popularity'], default=None) if candidates else None
+    return max(candidates, key=lambda t: t.get('popularity', 0), default=None) if candidates else None
 
 
 def with_retry(fn, *args, max_retries: int = 3, **kwargs):
@@ -151,7 +170,7 @@ def run(playlist_input: str, dry_run: bool, debug: bool = False) -> None:
     if debug:
         print('\n[DEBUG] Track fields from API:')
         for idx, item in enumerate(tracks):
-            t = item.get('track') or {}
+            t = get_track(item) or {}
             markets = t.get('available_markets', [])
             in_market = market in markets if markets else 'n/a'
             print(f'  [{idx+1}] is_local={item.get("is_local")} '
@@ -188,7 +207,7 @@ def run(playlist_input: str, dry_run: bool, debug: bool = False) -> None:
     no_replacement = []
 
     for idx, item in to_replace_sorted:
-        track = item['track']
+        track = get_track(item)
         title = track['name']
         artist = track['artists'][0]['name']
         original_id = track.get('id')
@@ -219,7 +238,7 @@ def run(playlist_input: str, dry_run: bool, debug: bool = False) -> None:
     for title, artist, r in replaced:
         album = r['album']['name']
         year = r['album'].get('release_date', '')[:4]
-        pop = r['popularity']
+        pop = r.get('popularity', '?')
         year_str = f', {year}' if year else ''
         print(f'  ✓ "{title}" by {artist}  →  "{r["name"]}" by {r["artists"][0]["name"]} '
               f'(album: {album}{year_str}) [popularity: {pop}]')
