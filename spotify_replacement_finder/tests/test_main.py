@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from main import extract_playlist_id, is_unavailable, find_replacement
+from main import extract_playlist_id, find_playlist_by_name, is_unavailable, find_replacement
 
 
 # --- extract_playlist_id ---
@@ -23,6 +23,54 @@ def test_extract_playlist_id_from_raw_id():
 def test_extract_playlist_id_malformed():
     with pytest.raises(ValueError):
         extract_playlist_id('not-a-playlist')
+
+
+# --- find_playlist_by_name ---
+
+def _make_playlists_page(names_and_ids, next_page=None):
+    return {
+        'items': [{'name': n, 'id': i, 'tracks': {'total': 10}} for n, i in names_and_ids],
+        'next': next_page,
+    }
+
+
+def test_find_playlist_by_name_exact_match():
+    sp = MagicMock()
+    sp.current_user_playlists.return_value = _make_playlists_page([('My Mix', 'id_abc'), ('Other', 'id_xyz')])
+    sp.next.return_value = None
+    assert find_playlist_by_name(sp, 'My Mix') == 'id_abc'
+
+
+def test_find_playlist_by_name_case_insensitive():
+    sp = MagicMock()
+    sp.current_user_playlists.return_value = _make_playlists_page([('my mix', 'id_abc')])
+    sp.next.return_value = None
+    assert find_playlist_by_name(sp, 'MY MIX') == 'id_abc'
+
+
+def test_find_playlist_by_name_not_found():
+    sp = MagicMock()
+    sp.current_user_playlists.return_value = _make_playlists_page([('Other Playlist', 'id_xyz')])
+    sp.next.return_value = None
+    with pytest.raises(ValueError, match='No playlist named'):
+        find_playlist_by_name(sp, 'Missing Playlist')
+
+
+def test_find_playlist_by_name_multiple_matches():
+    sp = MagicMock()
+    sp.current_user_playlists.return_value = _make_playlists_page([('Chill', 'id1'), ('Chill', 'id2')])
+    sp.next.return_value = None
+    with pytest.raises(ValueError, match='Multiple playlists'):
+        find_playlist_by_name(sp, 'Chill')
+
+
+def test_find_playlist_by_name_paginated():
+    sp = MagicMock()
+    page1 = _make_playlists_page([('Page One', 'p1')], next_page='url2')
+    page2 = _make_playlists_page([('Target', 'target_id')])
+    sp.current_user_playlists.return_value = page1
+    sp.next.side_effect = [page2, None]
+    assert find_playlist_by_name(sp, 'Target') == 'target_id'
 
 
 # --- is_unavailable ---

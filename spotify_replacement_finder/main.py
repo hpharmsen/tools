@@ -21,6 +21,20 @@ def extract_playlist_id(raw: str) -> str:
     raise ValueError(f'Cannot parse playlist ID from: {raw}')
 
 
+def find_playlist_by_name(sp: spotipy.Spotify, name: str) -> str:
+    result = sp.current_user_playlists()
+    matches = []
+    while result:
+        matches.extend(p for p in result['items'] if p['name'].lower() == name.lower())
+        result = sp.next(result) if result['next'] else None
+    if not matches:
+        raise ValueError(f'No playlist named "{name}" found in your library.')
+    if len(matches) > 1:
+        lines = '\n'.join(f'  {p["id"]}  ({p["tracks"]["total"]} tracks)' for p in matches)
+        raise ValueError(f'Multiple playlists named "{name}":\n{lines}\nUse the ID instead.')
+    return matches[0]['id']
+
+
 def build_client() -> spotipy.Spotify:
     client_id = os.getenv('SPOTIFY_CLIENT_ID')
     client_secret = os.getenv('SPOTIFY_CLIENT_SECRET')
@@ -93,9 +107,12 @@ def run(playlist_input: str, dry_run: bool) -> None:
 
     try:
         playlist_id = extract_playlist_id(playlist_input)
-    except ValueError as e:
-        print(f'Error: {e}', file=sys.stderr)
-        sys.exit(1)
+    except ValueError:
+        try:
+            playlist_id = find_playlist_by_name(sp, playlist_input)
+        except ValueError as e:
+            print(f'Error: {e}', file=sys.stderr)
+            sys.exit(1)
 
     playlist = sp.playlist(playlist_id, fields='owner,name,snapshot_id,tracks.total')
     playlist_name = playlist['name']
@@ -185,7 +202,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Replace unavailable Spotify tracks in a playlist'
     )
-    parser.add_argument('playlist', help='Spotify playlist URL or ID')
+    parser.add_argument('playlist', help='Spotify playlist name, URL, or ID')
     parser.add_argument(
         '--dry-run',
         action='store_true',
