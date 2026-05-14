@@ -122,17 +122,23 @@ def test_needs_replacement_track_not_in_market():
     assert needs_replacement(item, MARKET)
 
 
-def test_needs_replacement_local_file():
+def test_needs_replacement_local_file_skipped_by_default():
     item = _make_item(is_local=True, track_id=None)
     item['track']['id'] = None
-    assert needs_replacement(item, MARKET)
+    assert not needs_replacement(item, MARKET)  # default: skip local files
+
+
+def test_needs_replacement_local_file_with_replace_local():
+    item = _make_item(is_local=True, track_id=None)
+    item['track']['id'] = None
+    assert needs_replacement(item, MARKET, replace_local=True)
 
 
 def test_needs_replacement_local_file_without_name():
     item = _make_item(is_local=True, track_id=None, name=None)
     item['track']['id'] = None
     item['track']['name'] = None
-    assert not needs_replacement(item, MARKET)  # no name → can't search
+    assert not needs_replacement(item, MARKET, replace_local=True)  # no name → can't search
 
 
 def test_needs_replacement_null_track():

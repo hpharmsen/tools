@@ -74,15 +74,16 @@ def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dict]:
     return items
 
 
-def needs_replacement(item: dict, user_country: str) -> bool:
+def needs_replacement(item: dict, user_country: str, replace_local: bool = False) -> bool:
     track = get_track(item)
     if not track:
         return False
     if track.get('type') == 'episode':
         return False
-    # Local file: no Spotify ID — search for a streaming version
+    # Local file: only replace when explicitly requested — the API cannot tell
+    # whether the local file still exists on the user's machine.
     if item.get('is_local') or track.get('id') is None:
-        return bool(track.get('name'))  # only if we have a name to search with
+        return replace_local and bool(track.get('name'))
     # Unavailable Spotify track: user's country not in available_markets
     available = track.get('available_markets')
     if available is not None and user_country not in available:
@@ -134,7 +135,7 @@ def with_retry(fn, *args, max_retries: int = 3, **kwargs):
     raise RuntimeError(f'Rate limit exceeded after {max_retries} retries')
 
 
-def run(playlist_input: str, dry_run: bool, debug: bool = False) -> None:
+def run(playlist_input: str, dry_run: bool, replace_local: bool = False, debug: bool = False) -> None:
     sp = build_client()
 
     try:
@@ -180,7 +181,7 @@ def run(playlist_input: str, dry_run: bool, debug: bool = False) -> None:
                   f'name="{t.get("name")}" artist="{(t.get("artists") or [{}])[0].get("name")}"')
 
     to_replace = [
-        (idx, item) for idx, item in enumerate(tracks) if needs_replacement(item, market)
+        (idx, item) for idx, item in enumerate(tracks) if needs_replacement(item, market, replace_local)
     ]
 
     local_count = sum(1 for _, item in to_replace if item.get('is_local') or (item.get('track') or {}).get('id') is None)
@@ -262,6 +263,11 @@ if __name__ == '__main__':
         action='store_true',
         help='Find replacements without modifying the playlist',
     )
+    parser.add_argument(
+        '--replace-local',
+        action='store_true',
+        help='Also replace local files with Spotify streams (cannot detect if local file still works)',
+    )
     parser.add_argument('--debug', action='store_true', help='Print raw API fields per track')
     args = parser.parse_args()
-    run(args.playlist, args.dry_run, args.debug)
+    run(args.playlist, args.dry_run, args.replace_local, args.debug)
