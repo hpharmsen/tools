@@ -74,7 +74,7 @@ def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dict]:
     return items
 
 
-def needs_replacement(item: dict, user_country: str, replace_local: bool = False) -> bool:
+def needs_replacement(item: dict, user_country: str, replace_local: bool = True) -> bool:
     track = get_track(item)
     if not track:
         return False
@@ -264,10 +264,10 @@ if __name__ == '__main__':
         help='Find replacements without modifying the playlist',
     )
     parser.add_argument(
-        '--replace-local',
+        '--keep-local',
         action='store_true',
-        help='Also replace local files with Spotify streams (cannot detect if local file still works)',
+        help='Skip local files, only fix unavailable Spotify tracks',
     )
     parser.add_argument('--debug', action='store_true', help='Print raw API fields per track')
     args = parser.parse_args()
-    run(args.playlist, args.dry_run, args.replace_local, args.debug)
+    run(args.playlist, args.dry_run, not args.keep_local, args.debug)
