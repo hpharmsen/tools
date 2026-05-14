@@ -59,30 +59,38 @@ def build_client() -> spotipy.Spotify:
     ))
 
 
-def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str, market: str) -> list[dict]:
+def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dict]:
+    # No market param: ensures local file track objects are populated (market=X makes them null)
     items = []
-    result = sp.playlist_items(playlist_id, market=market, additional_types=['track'])
+    result = sp.playlist_items(playlist_id, additional_types=['track'])
     while result:
         items.extend(result['items'])
         result = sp.next(result) if result['next'] else None
     return items
 
 
-def is_unavailable(item: dict) -> bool:
+def needs_replacement(item: dict, user_country: str) -> bool:
     track = item.get('track')
     if not track:
         return False
+    if track.get('type') == 'episode':
+        return False
+    # Local file: no Spotify ID — search for a streaming version
     if item.get('is_local') or track.get('id') is None:
-        return False
-    if track.get('type') != 'track':
-        return False
+        return bool(track.get('name'))  # only if we have a name to search with
+    # Unavailable Spotify track: user's country not in available_markets
+    available = track.get('available_markets')
+    if available is not None and user_country not in available:
+        return True
+    # is_playable / restrictions as additional signal (when present)
     if not track.get('is_playable', True):
         return True
-    # fallback: restrictions object indicates market unavailability
-    return track.get('restrictions', {}).get('reason') == 'market'
+    if track.get('restrictions', {}).get('reason') == 'market':
+        return True
+    return False
 
 
-def find_replacement(sp: spotipy.Spotify, title: str, artist: str, original_id: str, market: str = 'from_token') -> dict | None:
+def find_replacement(sp: spotipy.Spotify, title: str, artist: str, original_id: str | None, market: str) -> dict | None:
     q = f'track:"{title}" artist:"{artist}"'
     results = sp.search(q=q, type='track', market=market, limit=10)
     candidates = [
@@ -107,7 +115,7 @@ def with_retry(fn, *args, max_retries: int = 3, **kwargs):
     raise RuntimeError(f'Rate limit exceeded after {max_retries} retries')
 
 
-def run(playlist_input: str, dry_run: bool) -> None:
+def run(playlist_input: str, dry_run: bool, debug: bool = False) -> None:
     sp = build_client()
 
     try:
@@ -121,7 +129,7 @@ def run(playlist_input: str, dry_run: bool) -> None:
 
     user = sp.current_user()
     user_id = user['id']
-    market = user.get('country', 'from_token')
+    market = user.get('country', 'NL')
 
     playlist = sp.playlist(playlist_id, fields='owner,name,snapshot_id,tracks.total')
     playlist_name = playlist['name']
@@ -137,34 +145,53 @@ def run(playlist_input: str, dry_run: bool) -> None:
             print('Use --dry-run to scan playlists you do not own.', file=sys.stderr)
             sys.exit(1)
 
-    tracks = fetch_all_tracks(sp, playlist_id, market)
+    tracks = fetch_all_tracks(sp, playlist_id)
     total = len(tracks)
 
-    unavailable = [
-        (idx, item) for idx, item in enumerate(tracks) if is_unavailable(item)
+    if debug:
+        print('\n[DEBUG] Track fields from API:')
+        for idx, item in enumerate(tracks):
+            t = item.get('track') or {}
+            markets = t.get('available_markets', [])
+            in_market = market in markets if markets else 'n/a'
+            print(f'  [{idx+1}] is_local={item.get("is_local")} '
+                  f'id={t.get("id")} type={t.get("type")} '
+                  f'is_playable={t.get("is_playable")} '
+                  f'in_market={in_market} '
+                  f'name="{t.get("name")}" artist="{(t.get("artists") or [{}])[0].get("name")}"')
+
+    to_replace = [
+        (idx, item) for idx, item in enumerate(tracks) if needs_replacement(item, market)
     ]
 
-    print(f'\nSpotify Replacement Finder')
-    print(f'Playlist: "{playlist_name}" ({total} tracks, {len(unavailable)} unavailable)')
+    local_count = sum(1 for _, item in to_replace if item.get('is_local') or (item.get('track') or {}).get('id') is None)
+    unavail_count = len(to_replace) - local_count
 
-    if not unavailable:
-        print('\nAll tracks are playable. Nothing to do.')
+    print(f'\nSpotify Replacement Finder')
+    print(f'Playlist: "{playlist_name}" ({total} tracks)')
+    if local_count:
+        print(f'  Local files to replace: {local_count}')
+    if unavail_count:
+        print(f'  Unavailable Spotify tracks: {unavail_count}')
+
+    if not to_replace:
+        print('\nAll tracks are playable Spotify streams. Nothing to do.')
         return
 
     if dry_run:
         print('[DRY RUN] No changes will be made.\n')
 
     # Process in reverse order to avoid position shifting
-    unavailable_sorted = sorted(unavailable, key=lambda x: x[0], reverse=True)
+    to_replace_sorted = sorted(to_replace, key=lambda x: x[0], reverse=True)
 
     replaced = []
     no_replacement = []
 
-    for idx, item in unavailable_sorted:
+    for idx, item in to_replace_sorted:
         track = item['track']
         title = track['name']
         artist = track['artists'][0]['name']
-        original_id = track['id']
+        original_id = track.get('id')
         original_uri = track['uri']
 
         replacement = find_replacement(sp, title, artist, original_id, market)
@@ -208,7 +235,7 @@ def run(playlist_input: str, dry_run: bool) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Replace unavailable Spotify tracks in a playlist'
+        description='Replace unavailable or local-file Spotify tracks in a playlist'
     )
     parser.add_argument('playlist', help='Spotify playlist name, URL, or ID')
     parser.add_argument(
@@ -216,5 +243,6 @@ if __name__ == '__main__':
         action='store_true',
         help='Find replacements without modifying the playlist',
     )
+    parser.add_argument('--debug', action='store_true', help='Print raw API fields per track')
     args = parser.parse_args()
-    run(args.playlist, args.dry_run)
+    run(args.playlist, args.dry_run, args.debug)

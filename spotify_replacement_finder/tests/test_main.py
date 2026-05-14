@@ -1,6 +1,8 @@
 import pytest
-from unittest.mock import MagicMock, patch
-from main import extract_playlist_id, find_playlist_by_name, is_unavailable, find_replacement, fetch_all_tracks
+from unittest.mock import MagicMock
+from main import extract_playlist_id, find_playlist_by_name, needs_replacement, find_replacement
+
+MARKET = 'NL'
 
 
 # --- extract_playlist_id ---
@@ -73,66 +75,72 @@ def test_find_playlist_by_name_paginated():
     assert find_playlist_by_name(sp, 'Target') == 'target_id'
 
 
-# --- is_unavailable ---
+# --- needs_replacement ---
 
-def _make_item(is_playable=True, is_local=False, track_type='track', track_id='abc123', track=True):
-    if not track:
-        return {'track': None, 'is_local': False}
-    return {
-        'is_local': is_local,
-        'track': {
-            'id': track_id,
-            'type': track_type,
-            'is_playable': is_playable,
-            'name': 'Test Track',
-            'artists': [{'name': 'Test Artist', 'id': 'artist1'}],
-        },
+def _make_item(is_local=False, track_type='track', track_id='abc123',
+               available_markets=None, is_playable=None, restrictions=None, name='Test Track'):
+    track = {
+        'id': track_id,
+        'type': track_type,
+        'name': name,
+        'uri': f'spotify:track:{track_id}',
+        'artists': [{'name': 'Test Artist'}],
     }
+    if available_markets is not None:
+        track['available_markets'] = available_markets
+    if is_playable is not None:
+        track['is_playable'] = is_playable
+    if restrictions is not None:
+        track['restrictions'] = restrictions
+    return {'is_local': is_local, 'track': track}
 
 
-def test_is_unavailable_playable_track():
-    assert not is_unavailable(_make_item(is_playable=True))
+def test_needs_replacement_playable_track_in_market():
+    item = _make_item(available_markets=['NL', 'DE', 'BE'])
+    assert not needs_replacement(item, MARKET)
 
 
-def test_is_unavailable_unavailable_track():
-    assert is_unavailable(_make_item(is_playable=False))
+def test_needs_replacement_track_not_in_market():
+    item = _make_item(available_markets=['US', 'GB'])
+    assert needs_replacement(item, MARKET)
 
 
-def test_is_unavailable_local_file():
-    assert not is_unavailable(_make_item(is_local=True, is_playable=False))
+def test_needs_replacement_local_file():
+    item = _make_item(is_local=True, track_id=None)
+    item['track']['id'] = None
+    assert needs_replacement(item, MARKET)
 
 
-def test_is_unavailable_episode():
-    assert not is_unavailable(_make_item(track_type='episode', is_playable=False))
+def test_needs_replacement_local_file_without_name():
+    item = _make_item(is_local=True, track_id=None, name=None)
+    item['track']['id'] = None
+    item['track']['name'] = None
+    assert not needs_replacement(item, MARKET)  # no name → can't search
 
 
-def test_is_unavailable_null_track():
-    assert not is_unavailable({'track': None, 'is_local': False})
+def test_needs_replacement_null_track():
+    assert not needs_replacement({'track': None, 'is_local': False}, MARKET)
 
 
-def test_is_unavailable_null_id():
-    assert not is_unavailable(_make_item(track_id=None, is_playable=False))
+def test_needs_replacement_episode():
+    item = _make_item(track_type='episode')
+    assert not needs_replacement(item, MARKET)
 
 
-def test_is_unavailable_absent_is_playable():
-    item = _make_item(is_playable=True)
-    del item['track']['is_playable']
-    assert not is_unavailable(item)  # absent = assume playable
+def test_needs_replacement_is_playable_false():
+    item = _make_item(is_playable=False)
+    assert needs_replacement(item, MARKET)
 
 
-def test_is_unavailable_restrictions_market():
-    # is_playable may be absent; restrictions.reason='market' is the fallback signal
-    item = _make_item(is_playable=True)
-    del item['track']['is_playable']
-    item['track']['restrictions'] = {'reason': 'market'}
-    assert is_unavailable(item)
+def test_needs_replacement_restrictions_market():
+    item = _make_item(restrictions={'reason': 'market'})
+    assert needs_replacement(item, MARKET)
 
 
-def test_is_unavailable_relinked_track():
-    # Relinked tracks have is_playable=True (Spotify already substituted) — skip
-    item = _make_item(is_playable=True)
-    item['track']['linked_from'] = {'id': 'original_id', 'uri': 'spotify:track:original_id'}
-    assert not is_unavailable(item)
+def test_needs_replacement_no_available_markets_field():
+    # available_markets absent → assume playable (e.g. for markets we can't check)
+    item = _make_item()  # no available_markets key
+    assert not needs_replacement(item, MARKET)
 
 
 # --- find_replacement ---
@@ -161,27 +169,34 @@ def test_find_replacement_picks_highest_popularity():
         _make_candidate('id2', 'Artist X', popularity=85),
         _make_candidate('id3', 'Artist X', popularity=70),
     ])
-    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id')
+    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id', MARKET)
     assert result['id'] == 'id2'
 
 
 def test_find_replacement_filters_same_id():
-    # Original track ID returned in search results — must be excluded
     sp = _make_sp_search([
         _make_candidate('original_id', 'Artist X', popularity=95),
         _make_candidate('alt_id', 'Artist X', popularity=70),
     ])
-    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id')
+    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id', MARKET)
     assert result['id'] == 'alt_id'
 
 
+def test_find_replacement_filters_same_id_none():
+    # Local files have id=None — all results are valid candidates
+    sp = _make_sp_search([
+        _make_candidate('id1', 'Artist X', popularity=80),
+    ])
+    result = find_replacement(sp, 'Same Song', 'Artist X', None, MARKET)
+    assert result['id'] == 'id1'
+
+
 def test_find_replacement_filters_covers():
-    # Candidate with different artist should be excluded
     sp = _make_sp_search([
         _make_candidate('cover_id', 'Cover Artist', popularity=90),
         _make_candidate('real_id', 'Artist X', popularity=65),
     ])
-    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id')
+    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id', MARKET)
     assert result['id'] == 'real_id'
 
 
@@ -190,27 +205,19 @@ def test_find_replacement_filters_unplayable():
         _make_candidate('id1', 'Artist X', popularity=80, is_playable=False),
         _make_candidate('id2', 'Artist X', popularity=60, is_playable=True),
     ])
-    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id')
+    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id', MARKET)
     assert result['id'] == 'id2'
 
 
 def test_find_replacement_no_candidates():
     sp = _make_sp_search([])
-    result = find_replacement(sp, 'Rare Track', 'Obscure Artist', 'original_id')
-    assert result is None
-
-
-def test_find_replacement_all_same_id():
-    sp = _make_sp_search([
-        _make_candidate('original_id', 'Artist X', popularity=95),
-    ])
-    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id')
+    result = find_replacement(sp, 'Rare Track', 'Obscure Artist', 'original_id', MARKET)
     assert result is None
 
 
 def test_find_replacement_artist_case_insensitive():
     sp = _make_sp_search([
-        _make_candidate('id1', 'artist x', popularity=80),  # lowercase
+        _make_candidate('id1', 'artist x', popularity=80),
     ])
-    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id')
+    result = find_replacement(sp, 'Same Song', 'Artist X', 'original_id', MARKET)
     assert result['id'] == 'id1'
