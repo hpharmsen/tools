@@ -10,7 +10,7 @@ from spotipy.oauth2 import SpotifyOAuth
 
 load_dotenv()
 
-SCOPE = 'playlist-read-private playlist-modify-private playlist-modify-public'
+SCOPE = 'user-read-private playlist-read-private playlist-modify-private playlist-modify-public'
 
 
 def extract_playlist_id(raw: str) -> str:
@@ -49,6 +49,8 @@ def build_client() -> spotipy.Spotify:
         print('Copy .env.example to .env and fill in your Spotify app credentials.', file=sys.stderr)
         sys.exit(1)
 
+    print(f'Authenticating... (redirect URI: {redirect_uri})')
+    print('Make sure this URI is added in your Spotify app at developer.spotify.com → your app → Edit settings → Redirect URIs\n')
     return spotipy.Spotify(auth_manager=SpotifyOAuth(
         client_id=client_id,
         client_secret=client_secret,
@@ -57,9 +59,9 @@ def build_client() -> spotipy.Spotify:
     ))
 
 
-def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> list[dict]:
+def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str, market: str) -> list[dict]:
     items = []
-    result = sp.playlist_items(playlist_id, market='from_token', additional_types=['track'])
+    result = sp.playlist_items(playlist_id, market=market, additional_types=['track'])
     while result:
         items.extend(result['items'])
         result = sp.next(result) if result['next'] else None
@@ -74,12 +76,15 @@ def is_unavailable(item: dict) -> bool:
         return False
     if track.get('type') != 'track':
         return False
-    return not track.get('is_playable', True)
+    if not track.get('is_playable', True):
+        return True
+    # fallback: restrictions object indicates market unavailability
+    return track.get('restrictions', {}).get('reason') == 'market'
 
 
-def find_replacement(sp: spotipy.Spotify, title: str, artist: str, original_id: str) -> dict | None:
+def find_replacement(sp: spotipy.Spotify, title: str, artist: str, original_id: str, market: str = 'from_token') -> dict | None:
     q = f'track:"{title}" artist:"{artist}"'
-    results = sp.search(q=q, type='track', market='from_token', limit=10)
+    results = sp.search(q=q, type='track', market=market, limit=10)
     candidates = [
         t for t in results['tracks']['items']
         if t.get('id') != original_id
@@ -114,12 +119,15 @@ def run(playlist_input: str, dry_run: bool) -> None:
             print(f'Error: {e}', file=sys.stderr)
             sys.exit(1)
 
+    user = sp.current_user()
+    user_id = user['id']
+    market = user.get('country', 'from_token')
+
     playlist = sp.playlist(playlist_id, fields='owner,name,snapshot_id,tracks.total')
     playlist_name = playlist['name']
     snapshot_id = playlist['snapshot_id']
 
     if not dry_run:
-        user_id = sp.current_user()['id']
         if playlist['owner']['id'] != user_id:
             print(
                 f'Error: playlist "{playlist_name}" is owned by '
@@ -129,7 +137,7 @@ def run(playlist_input: str, dry_run: bool) -> None:
             print('Use --dry-run to scan playlists you do not own.', file=sys.stderr)
             sys.exit(1)
 
-    tracks = fetch_all_tracks(sp, playlist_id)
+    tracks = fetch_all_tracks(sp, playlist_id, market)
     total = len(tracks)
 
     unavailable = [
@@ -159,7 +167,7 @@ def run(playlist_input: str, dry_run: bool) -> None:
         original_id = track['id']
         original_uri = track['uri']
 
-        replacement = find_replacement(sp, title, artist, original_id)
+        replacement = find_replacement(sp, title, artist, original_id, market)
 
         if replacement is None:
             no_replacement.append((title, artist))

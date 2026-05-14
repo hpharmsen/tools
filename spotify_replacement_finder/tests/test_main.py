@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from main import extract_playlist_id, find_playlist_by_name, is_unavailable, find_replacement
+from main import extract_playlist_id, find_playlist_by_name, is_unavailable, find_replacement, fetch_all_tracks
 
 
 # --- extract_playlist_id ---
@@ -118,6 +118,14 @@ def test_is_unavailable_absent_is_playable():
     item = _make_item(is_playable=True)
     del item['track']['is_playable']
     assert not is_unavailable(item)  # absent = assume playable
+
+
+def test_is_unavailable_restrictions_market():
+    # is_playable may be absent; restrictions.reason='market' is the fallback signal
+    item = _make_item(is_playable=True)
+    del item['track']['is_playable']
+    item['track']['restrictions'] = {'reason': 'market'}
+    assert is_unavailable(item)
 
 
 def test_is_unavailable_relinked_track():
