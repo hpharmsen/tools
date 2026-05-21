@@ -620,9 +620,14 @@ Rules:
                 let errorMessage = error.message;
 
                 // Provide more specific error messages
-                if (error.message.includes('401') || error.message.includes('invalid') || error.message.includes('Unauthorized')) {
-                    errorMessage = 'Invalid API key. Click "Change API Key" below to update it.';
-                    showToast('Invalid API key. Please update it.', true);
+                const msg = error.message || '';
+                const isAuthError = /401|403|invalid|Unauthorized|User not found|No auth credentials|API key/i.test(msg);
+                if (isAuthError) {
+                    apiKey = null;
+                    localStorage.removeItem(STORAGE_KEY);
+                    errorMessage = 'Your OpenRouter API key is invalid or expired. The stored key has been removed.';
+                    showToast('Invalid API key — please enter a new one.', true);
+                    setTimeout(() => requestApiKey(), 300);
                 } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
                     errorMessage = 'Network error. Check your internet connection.';
                     showToast('Network error. Check connection.', true);
