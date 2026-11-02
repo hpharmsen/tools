@@ -201,38 +201,73 @@ def run(playlist_input: str, dry_run: bool, replace_local: bool = False, debug: 
     if dry_run:
         print('[DRY RUN] No changes will be made.\n')
 
-    # Process in reverse order to avoid position shifting
-    to_replace_sorted = sorted(to_replace, key=lambda x: x[0], reverse=True)
+    has_local = any(
+        item.get('is_local') or not (get_track(item) or {}).get('id')
+        for _, item in to_replace
+    )
 
     replaced = []
     no_replacement = []
 
-    for idx, item in to_replace_sorted:
-        track = get_track(item)
-        title = track['name']
-        artist = track['artists'][0]['name']
-        original_id = track.get('id')
-        original_uri = track['uri']
+    if has_local and not dry_run:
+        # Spotify API forbids DELETE on local file tracks.
+        # Rebuild the entire playlist atomically via PUT to replace them.
+        replacement_map = {}
+        for idx, item in to_replace:
+            track = get_track(item)
+            title, artist = track['name'], track['artists'][0]['name']
+            replacement = find_replacement(sp, title, artist, track.get('id'), market)
+            if replacement:
+                replacement_map[idx] = replacement
+                replaced.append((title, artist, replacement))
+            else:
+                no_replacement.append((title, artist))
 
-        replacement = find_replacement(sp, title, artist, original_id, market)
+        if replacement_map:
+            local_idxs = {
+                i for i, item in enumerate(tracks)
+                if item.get('is_local') or not (get_track(item) or {}).get('id')
+            }
+            new_uris = []
+            for i, item in enumerate(tracks):
+                if i in replacement_map:
+                    new_uris.append(replacement_map[i]['uri'])
+                elif i not in local_idxs:
+                    track = get_track(item)
+                    if track and track.get('uri'):
+                        new_uris.append(track['uri'])
+                # local files not replaced: dropped (API won't accept spotify:local: URIs in PUT)
 
-        if replacement is None:
-            no_replacement.append((title, artist))
-            continue
+            sp.playlist_replace_items(playlist_id, new_uris[:100])
+            for i in range(100, len(new_uris), 100):
+                with_retry(sp.playlist_add_items, playlist_id, new_uris[i:i+100])
 
-        if dry_run:
+    else:
+        # No local files (or dry-run): surgical remove+add per track in reverse order
+        for idx, item in sorted(to_replace, key=lambda x: x[0], reverse=True):
+            track = get_track(item)
+            title, artist = track['name'], track['artists'][0]['name']
+            original_id, original_uri = track.get('id'), track['uri']
+
+            replacement = find_replacement(sp, title, artist, original_id, market)
+
+            if replacement is None:
+                no_replacement.append((title, artist))
+                continue
+
+            if dry_run:
+                replaced.append((title, artist, replacement))
+                continue
+
+            with_retry(
+                sp.playlist_remove_specific_occurrences_of_items,
+                playlist_id,
+                [{'uri': original_uri, 'positions': [idx]}],
+                snapshot_id=snapshot_id,
+            )
+            result = sp.playlist_add_items(playlist_id, [replacement['uri']], position=idx)
+            snapshot_id = result.get('snapshot_id', snapshot_id)
             replaced.append((title, artist, replacement))
-            continue
-
-        with_retry(
-            sp.playlist_remove_specific_occurrences_of_items,
-            playlist_id,
-            [{'uri': original_uri, 'positions': [idx]}],
-            snapshot_id=snapshot_id,
-        )
-        result = sp.playlist_add_items(playlist_id, [replacement['uri']], position=idx)
-        snapshot_id = result.get('snapshot_id', snapshot_id)
-        replaced.append((title, artist, replacement))
 
     verb = 'Would replace' if dry_run else 'Replaced'
     print(f'\n{verb} ({len(replaced)}):')
@@ -248,6 +283,8 @@ def run(playlist_input: str, dry_run: bool, replace_local: bool = False, debug: 
         print(f'\nNo replacement found ({len(no_replacement)}):')
         for title, artist in no_replacement:
             print(f'  ✗ "{title}" by {artist}')
+        if has_local and not dry_run:
+            print('  (local files above had no Spotify match and were removed from the playlist)')
 
     action = 'would be replaced' if dry_run else 'replaced'
     print(f'\nDone. {len(replaced)} tracks {action}, {len(no_replacement)} could not be fixed.')

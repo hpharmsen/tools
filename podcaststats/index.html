@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Podcast Stats - Hoy en Español</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --accent: #e94560;
+            --accent-hover: #ff6b6b;
+            --text-primary: #eee;
+            --text-secondary: #aaa;
+            --success: #4ecca3;
+            --border: #3a3a5c;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+        }
+
+        h1 { font-size: 1.8rem; margin-bottom: 8px; }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .updated {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-top: 8px;
+        }
+
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .chart-title {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        canvas { max-height: 400px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        th, td {
+            padding: 10px 14px;
+            text-align: right;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+
+        th:first-child, td:first-child { text-align: left; }
+
+        tr:hover td { background: rgba(255,255,255,0.03); }
+
+        .channel-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .loading, .error {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .error { color: var(--accent); }
+
+        @media (max-width: 600px) {
+            th, td { padding: 8px 6px; font-size: 0.85rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Podcast Stats</h1>
+            <div class="subtitle">Hoy en Español — wekelijkse luistercijfers</div>
+            <div class="updated" id="updated"></div>
+        </header>
+
+        <div class="chart-container">
+            <div class="chart-title">Unieke luisteraars per week</div>
+            <canvas id="listenersChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Downloads per week</div>
+            <canvas id="downloadsChart"></canvas>
+        </div>
+
+        <div class="chart-container" style="padding: 0;">
+            <table id="statsTable">
+                <thead>
+                    <tr>
+                        <th>Week</th>
+                        <th>harmsen.nl</th>
+                        <th>Spotify</th>
+                        <th>Apple</th>
+                        <th>Totaal</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="loading" id="loading">Laden...</div>
+    <div class="error" id="error" style="display:none;"></div>
+
+    <script>
+        const STATS_URL = 'https://s3.eu-west-1.amazonaws.com/harmsen.nl/podcast/stats.json';
+        const CHANNELS = ['harmsen.nl', 'Spotify', 'Apple Podcasts'];
+        const COLORS = {
+            'harmsen.nl': '#4ecca3',
+            'Spotify': '#1db954',
+            'Apple Podcasts': '#fc3c44'
+        };
+
+        async function init() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+
+            try {
+                const resp = await fetch(STATS_URL);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const json = await resp.json();
+
+                loading.style.display = 'none';
+
+                // Show last updated
+                if (json.exported_at) {
+                    const d = new Date(json.exported_at);
+                    document.getElementById('updated').textContent =
+                        `Laatst bijgewerkt: ${d.toLocaleDateString('nl-NL')} ${d.toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}`;
+                }
+
+                // Group data by yearweek
+                const byWeek = {};
+                for (const row of json.data) {
+                    if (!byWeek[row.yearweek]) byWeek[row.yearweek] = {};
+                    byWeek[row.yearweek][row.channel] = row;
+                }
+
+                const weeks = Object.keys(byWeek).sort();
+
+                renderCharts(weeks, byWeek);
+                renderTable(weeks, byWeek);
+            } catch (e) {
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                error.textContent = `Kon data niet laden: ${e.message}`;
+            }
+        }
+
+        function renderCharts(weeks, byWeek) {
+            const chartDefaults = {
+                responsive: true,
+                interaction: { intersect: false, mode: 'index' },
+                scales: {
+                    x: {
+                        ticks: { color: '#aaa', maxRotation: 45 },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#aaa' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#eee' } }
+                }
+            };
+
+            function makeDatasets(field) {
+                return CHANNELS.map(ch => ({
+                    label: ch,
+                    data: weeks.map(w => (byWeek[w][ch] || {})[field] || 0),
+                    borderColor: COLORS[ch],
+                    backgroundColor: COLORS[ch] + '33',
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 2
+                }));
+            }
+
+            new Chart(document.getElementById('listenersChart'), {
+                type: 'line',
+                data: { labels: weeks, datasets: makeDatasets('listeners') },
+                options: { ...chartDefaults }
+            });
+
+            new Chart(document.getElementById('downloadsChart'), {
+                type: 'line',
+                data: { labels: weeks, datasets: makeDatasets('downloads') },
+                options: { ...chartDefaults }
+            });
+        }
+
+        function renderTable(weeks, byWeek) {
+            const tbody = document.querySelector('#statsTable tbody');
+
+            // Show most recent weeks first
+            for (const w of [...weeks].reverse()) {
+                const row = document.createElement('tr');
+                const data = byWeek[w];
+
+                const listeners = CHANNELS.map(ch => (data[ch] || {}).listeners || 0);
+                const total = listeners.reduce((a, b) => a + b, 0);
+
+                row.innerHTML = `
+                    <td>${w}</td>
+                    ${CHANNELS.map((ch, i) => `
+                        <td>
+                            <span class="channel-dot" style="background:${COLORS[ch]}"></span>
+                            ${listeners[i]}
+                        </td>
+                    `).join('')}
+                    <td><strong>${total}</strong></td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
